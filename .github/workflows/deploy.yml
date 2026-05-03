@@ -1,0 +1,59 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # 也允许手动触发
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false  # 别取消进行中的部署
+
+jobs:
+  deploy:
+    name: SSH 部署到生产服务器
+    runs-on: ubuntu-latest
+    environment: production # 用 GitHub Environments 加保护规则更稳
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 写入 SSH 私钥
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 触发服务器更新
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}    # 服务器上仓库根目录，如 /www/wwwroot/video
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
+            "${SSH_USER}@${SSH_HOST}" \
+            "set -e; cd '${DEPLOY_PATH}'; \
+             git fetch --all; \
+             git reset --hard origin/main; \
+             ./deploy.sh update"
+
+      - name: 健康检查
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
+            "${SSH_USER}@${SSH_HOST}" \
+            "docker compose --env-file /www/wwwroot/video/.env.prod \
+               -f /www/wwwroot/video/docker-compose.prod.yml ps"
+
+      - name: 通知（可选 — Slack / 飞书 / 钉钉 webhook）
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          if [ -n "${{ secrets.NOTIFY_WEBHOOK }}" ]; then
+            curl -X POST -H "Content-Type: application/json" \
+              -d "{\"text\":\"🚀 video-platform deploy: $STATUS by ${{ github.actor }} (${{ github.sha }})\"}" \
+              "${{ secrets.NOTIFY_WEBHOOK }}" || true
+          fi

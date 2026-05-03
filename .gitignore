@@ -1,0 +1,29 @@
+# Docker
+docker-compose.override.yml
+.env.prod
+
+# Env
+**/.env
+!**/.env.example
+
+# Logs / OS
+*.log
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Build
+admin/vendor/
+admin/node_modules/
+admin/storage/logs/*
+admin/storage/framework/cache/*
+admin/storage/framework/sessions/*
+admin/storage/framework/views/*
+api/video-api
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/

@@ -1,0 +1,7 @@
+.git
+.gitignore
+.env
+*.log
+README.md
+docs/
+**/.DS_Store

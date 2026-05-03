@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  go-api:
+    name: Go API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: api/go.sum
+
+      - name: go mod tidy（顺便检测 go.mod 是否需要更新）
+        run: |
+          go mod tidy
+          if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
+            echo "::error::go.mod / go.sum 不是最新，请本地跑 go mod tidy"
+            git diff
+            exit 1
+          fi
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::这些文件未 gofmt：$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build -v ./...
+
+      # 想加测试就放开
+      # - name: go test
+      #   run: go test -race -v ./...
+
+  php-admin:
+    name: PHP Admin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_mysql, mbstring, intl, gd, zip
+          coverage: none
+
+      - name: PHP syntax lint
+        run: |
+          ! find app database routes config bootstrap -name "*.php" -print0 \
+            | xargs -0 -n1 php -l 2>&1 | grep -v "No syntax errors detected"
+
+      # composer install + 静态分析（如果你后续加了 phpstan / pint）
+      # - run: composer install --no-progress --prefer-dist
+      # - run: ./vendor/bin/pint --test
+
+  ios:
+    name: iOS（仅静态检查）
+    runs-on: macos-14
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift syntax 检查（找语法错的文件）
+        run: |
+          set -e
+          for f in $(find ios -name "*.swift"); do
+            # parse-as-library 不需要完整工程，能快速检出 syntax error
+            xcrun swiftc -parse "$f" 2>&1 | tee /tmp/swift.log
+            if grep -q "error:" /tmp/swift.log; then
+              echo "::error file=$f::Swift 语法错误"
+              exit 1
+            fi
+          done
+
+  compose:
+    name: docker-compose 文件验证
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate dev compose
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: validate prod compose（用占位变量）
+        env:
+          ADMIN_DOMAIN: example.com
+          API_DOMAIN: api.example.com
+          ACME_EMAIL: a@example.com
+          TRAEFIK_DASHBOARD_AUTH: 'admin:dummy'
+          DB_NAME: x
+          DB_USER: x
+          DB_PASSWORD: x
+          DB_ROOT_PASSWORD: x
+          APP_KEY: 'base64:dummy'
+          JWT_SECRET: x
+          OSS_ENDPOINT: https://oss-cn-hangzhou.aliyuncs.com
+          OSS_BUCKET: bucket
+          OSS_AK: x
+          OSS_SK: x
+        run: docker compose -f docker-compose.prod.yml config --quiet

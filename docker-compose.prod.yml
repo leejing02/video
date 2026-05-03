@@ -1,0 +1,262 @@
+# =====================================================================
+# 生产环境 — Traefik + Let's Encrypt 自动 HTTPS
+#
+# 与 docker-compose.yml（开发版）的差别：
+#   ✓ Traefik 监听 80/443，自动签证书（HTTP-01 challenge）
+#   ✓ 全部 HTTP 流量 301 → HTTPS
+#   ✓ 域名从环境变量读取（ADMIN_DOMAIN / API_DOMAIN）
+#   ✓ Traefik Dashboard 加 BasicAuth 中间件，不暴露 :8080
+#   ✓ admin 不挂源码卷，全部用镜像里 build 好的代码
+#   ✓ APP_DEBUG=false，OPcache 全开
+#   ✓ 不带 seed.sql（生产不允许覆写）
+#
+# 使用：
+#   1. 把域名解析到这台服务器：
+#      A 记录 admin.example.com → <服务器 IP>
+#      A 记录 api.example.com   → <服务器 IP>
+#   2. 拷贝并填好环境变量：
+#      cp .env.prod.example .env.prod
+#      编辑 .env.prod 改域名 / 邮箱 / 密码
+#   3. 启动：
+#      docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#   4. 第一次签证书可能需要 ~30 秒，看日志：
+#      docker compose -f docker-compose.prod.yml logs -f traefik
+# =====================================================================
+name: video-prod
+
+services:
+
+  # ---------------------------------------------------------------
+  # Traefik —— 80/443 + ACME
+  # ---------------------------------------------------------------
+  traefik:
+    image: traefik:v3.1
+    container_name: video-traefik
+    restart: unless-stopped
+    command:
+      # 服务发现
+      - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock   # ★ 显式 socket，避免回退到 TCP
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=video-prod_video
+
+      # 入口
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+
+      # HTTP 强制 301 跳 HTTPS
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+
+      # Let's Encrypt（HTTP-01 challenge，无需 DNS API）
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # 想先用 staging 测试不被吊销额度，把下一行打开
+      # - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+
+      # API（Dashboard 通过路由 + BasicAuth 暴露，不开 insecure）
+      - --api.dashboard=true
+
+      # 日志
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.bufferingsize=100
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # SELinux 系统（CentOS/RHEL）需要 :ro,z 标签
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_acme:/letsencrypt
+    labels:
+      # Dashboard：https://traefik.${ADMIN_DOMAIN}
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${ADMIN_DOMAIN}`)
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls.certresolver=le
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.middlewares=dash-auth
+      # ${TRAEFIK_DASHBOARD_AUTH} 形如 admin:$$2y$$05$$xxxxx（htpasswd 生成，注意 $ 要写两次转义）
+      - traefik.http.middlewares.dash-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # MySQL —— 仅内部
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: video-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 生产只跑 schema，不 seed
+      - ./api/migrations/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    expose: ["3306"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: video-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    expose: ["6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # Go API
+  # ---------------------------------------------------------------
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: video-api:prod
+    container_name: video-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: "8000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_PARAMS: "charset=utf8mb4&parseTime=true&loc=Local"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_HOURS: "${JWT_TTL_HOURS:-720}"
+      CORS_ORIGINS: "https://${ADMIN_DOMAIN},https://${API_DOMAIN}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose: ["8000"]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls.certresolver=le
+      - traefik.http.services.api.loadbalancer.server.port=8000
+      # WebSocket 头透传（gorilla/websocket 升级需要）
+      - traefik.http.routers.api.middlewares=ws-headers
+      - traefik.http.middlewares.ws-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # Laravel + Filament 后台
+  # ---------------------------------------------------------------
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    image: video-admin:prod
+    container_name: video-admin
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      APP_URL: https://${ADMIN_DOMAIN}
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_NAME}
+      DB_USERNAME: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # 只挂 storage，不挂源码（用镜像里 build 好的）
+      - admin_storage:/var/www/html/storage
+    expose: ["80"]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.admin.rule=Host(`${ADMIN_DOMAIN}`)
+      - traefik.http.routers.admin.entrypoints=websecure
+      - traefik.http.routers.admin.tls.certresolver=le
+      - traefik.http.services.admin.loadbalancer.server.port=80
+      # 安全头
+      - traefik.http.routers.admin.middlewares=secure-headers
+      - traefik.http.middlewares.secure-headers.headers.framedeny=true
+      - traefik.http.middlewares.secure-headers.headers.contenttypenosniff=true
+      - traefik.http.middlewares.secure-headers.headers.referrerpolicy=strict-origin-when-cross-origin
+      - traefik.http.middlewares.secure-headers.headers.stsseconds=15552000
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # MySQL 自动备份（mysqldump → OSS / S3）
+  # ---------------------------------------------------------------
+  backup:
+    build:
+      context: ./ops/backup
+    image: video-backup:prod
+    container_name: video-backup
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}     # 如 https://oss-cn-hangzhou.aliyuncs.com
+      OSS_BUCKET:   ${OSS_BUCKET}
+      OSS_AK:       ${OSS_AK}
+      OSS_SK:       ${OSS_SK}
+      LOCAL_KEEP_DAYS: "${LOCAL_KEEP_DAYS:-7}"
+      OSS_KEEP_DAYS:   "${OSS_KEEP_DAYS:-30}"
+      NOTIFY_WEBHOOK:  "${NOTIFY_WEBHOOK:-}"
+      RUN_ON_START:    "false"          # true = 容器启动时立刻跑一次
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - backup_data:/backups
+    networks: [video]
+
+volumes:
+  mysql_data:
+  redis_data:
+  admin_storage:
+  traefik_acme:
+  backup_data:
+
+networks:
+  video:
+    driver: bridge

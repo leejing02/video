@@ -1,0 +1,180 @@
+# =====================================================================
+# Video Platform — Traefik 反代模式：主机零端口冲突
+#
+#   只有 Traefik 一个服务暴露端口（默认 8088 / 8081），
+#   mysql / redis / api / admin 全部走内部网络由 Traefik 路由。
+#
+# 访问入口（默认）：
+#   http://admin.video.localhost:8088/admin     ← Filament 后台
+#   http://api.video.localhost:8088/api/...     ← Go API
+#   ws://api.video.localhost:8088/ws/chat        ← WebSocket
+#   http://localhost:8081                        ← Traefik Dashboard（开发期）
+#
+# *.localhost 在 macOS / 现代 Linux 上自动解析到 127.0.0.1，无需改 /etc/hosts；
+# 如果你的系统不支持，往 /etc/hosts 加：
+#   127.0.0.1 admin.video.localhost api.video.localhost
+#
+# 想用 TablePlus / DBeaver 直连 MySQL？复制 docker-compose.override.example.yml
+# 为 docker-compose.override.yml 即可暂时开放 3306。
+# =====================================================================
+name: video-platform
+
+services:
+
+  # ---------------------------------------------------------------
+  # 1. 反向代理（唯一对外暴露）
+  # ---------------------------------------------------------------
+  traefik:
+    image: traefik:v3.1
+    container_name: video-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock   # ★ 显式指 socket，避免连 TCP daemon
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=video-platform_video
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true              # 仅开发：dashboard 无认证
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      # 主机的 8088 / 8081 任一冲突时改成你想要的端口即可
+      - "8088:80"      # 应用流量入口
+      - "8081:8080"    # Traefik Dashboard（http://localhost:8081）
+    volumes:
+      # :ro 避免 Traefik 误改 socket；
+      # 部分 SELinux/AppArmor 系统（CentOS/RHEL）需要加 :z 标签：
+      #   - /var/run/docker.sock:/var/run/docker.sock:ro,z
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 2. MySQL（仅内部）
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: video-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: video_platform
+      MYSQL_USER: video
+      MYSQL_PASSWORD: videopw
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./api/migrations/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./api/migrations/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpw"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 3. Redis（仅内部）
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: video-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 4. Go API
+  # ---------------------------------------------------------------
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: video-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: "8000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: video
+      DB_PASSWORD: videopw
+      DB_NAME: video_platform
+      DB_PARAMS: "charset=utf8mb4&parseTime=true&loc=Local"
+      JWT_SECRET: change-me-in-production
+      JWT_TTL_HOURS: "720"
+      CORS_ORIGINS: "*"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8000"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-platform_video
+      # 路由：Host = api.video.localhost
+      - traefik.http.routers.api.rule=Host(`api.video.localhost`)
+      - traefik.http.routers.api.entrypoints=web
+      - traefik.http.services.api.loadbalancer.server.port=8000
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 5. Laravel + Filament 后台
+  # ---------------------------------------------------------------
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: video-admin
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: http://admin.video.localhost:8088
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: video_platform
+      DB_USERNAME: video
+      DB_PASSWORD: videopw
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # 信任 Traefik 转发的 X-Forwarded-* 头
+      TRUSTED_PROXIES: "*"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./admin:/var/www/html
+      - admin_storage:/var/www/html/storage
+      - admin_vendor:/var/www/html/vendor
+    expose:
+      - "80"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-platform_video
+      - traefik.http.routers.admin.rule=Host(`admin.video.localhost`)
+      - traefik.http.routers.admin.entrypoints=web
+      - traefik.http.services.admin.loadbalancer.server.port=80
+    networks: [video]
+
+volumes:
+  mysql_data:
+  admin_storage:
+  admin_vendor:
+
+networks:
+  video:
+    driver: bridge
