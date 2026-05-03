@@ -9,7 +9,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web:      __DIR__ . '/../routes/web.php',
         api:      __DIR__ . '/../routes/api.php',
-        channels: __DIR__ . '/../routes/channels.php',
+        // channels 不再加载 — Laravel 广播被禁用，WebSocket 走 Go API
+        // channels: __DIR__ . '/../routes/channels.php',
         commands: __DIR__ . '/../routes/console.php',
         health:   '/up',
     )

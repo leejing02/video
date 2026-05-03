@@ -15,7 +15,6 @@ use App\Policies\CommentPolicy;
 use App\Policies\RolePolicy;
 use App\Policies\UserPolicy;
 use App\Policies\VideoPolicy;
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Role;
@@ -28,8 +27,6 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Broadcast::routes(['middleware' => ['auth:sanctum']]);
-
         // ── Policies ─────────────────────────────────────────────
         Gate::policy(User::class,        UserPolicy::class);
         Gate::policy(Role::class,        RolePolicy::class);
@@ -38,5 +35,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Comment::class,     CommentPolicy::class);
         Gate::policy(ChatRoom::class,    ChatRoomPolicy::class);
         Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
+
+        // 注：Laravel 广播被禁用，WebSocket 走 Go API
+        // 想恢复就放开 Broadcast::routes(['middleware' => ['auth:sanctum']]);
     }
 }
