@@ -3,16 +3,22 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ShortVideoCategoryResource\Pages;
-use App\Models\Category;
+use App\Domains\Video\Models\Category;
+use App\Domains\Video\Models\ShortVideoCategory;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Str;
 
+/**
+ * 短视频分类（categories.type='short' 的子集）。
+ * Model 上有 global scope，查询自动加 type='short'，无需重复 where。
+ */
 class ShortVideoCategoryResource extends CategoryResource
 {
+    protected static ?string $model = ShortVideoCategory::class;
+
     protected static bool $shouldRegisterNavigation = true;
 
     protected static ?string $navigationIcon  = 'heroicon-o-folder-open';
@@ -22,33 +28,26 @@ class ShortVideoCategoryResource extends CategoryResource
     protected static ?int $navigationSort     = 22;
     protected static ?string $slug            = 'short-categories';
 
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->whereIn('kind', [Category::KIND_SHORT, Category::KIND_BOTH]);
-    }
-
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Grid::make(2)->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('名称')
-                    ->required()
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(fn ($state, Forms\Set $set) => $set('slug', Str::slug($state))),
+                Forms\Components\TextInput::make('name')->label('名称')->required(),
                 Forms\Components\TextInput::make('slug')
                     ->label('Slug')
-                    ->unique(ignoreRecord: true)
-                    ->required(),
-                Forms\Components\Select::make('kind')
-                    ->label('使用范围')
-                    ->options([
-                        Category::KIND_SHORT => '仅短视频',
-                        Category::KIND_BOTH  => '通用（长 + 短）',
-                    ])
-                    ->default(Category::KIND_SHORT)
-                    ->required(),
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->placeholder('保存后自动生成'),
+                Forms\Components\Select::make('parent_id')
+                    ->label('父分类')
+                    ->options(fn () => Category::query()
+                        ->where('type', Category::TYPE_SHORT)
+                        ->where('is_active', true)
+                        ->orderBy('sort')
+                        ->pluck('name', 'id')
+                        ->all())
+                    ->searchable()
+                    ->placeholder('— 顶级 —'),
                 Forms\Components\TextInput::make('sort')->label('排序')->numeric()->default(0),
                 Forms\Components\TextInput::make('icon')
                     ->label('图标（CDN url 或 SF Symbol 名）')
@@ -68,7 +67,8 @@ class ShortVideoCategoryResource extends CategoryResource
             ->columns([
                 Tables\Columns\ImageColumn::make('cover')->label('封面')->square(),
                 Tables\Columns\TextColumn::make('name')->label('名称')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('slug')->label('Slug')->copyable(),
+                Tables\Columns\TextColumn::make('slug')->label('Slug')->copyable()->toggleable(),
+                Tables\Columns\TextColumn::make('parent.name')->label('父分类')->placeholder('—'),
                 Tables\Columns\TextColumn::make('short_videos_count')
                     ->counts('shortVideos')
                     ->label('短视频数')

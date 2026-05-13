@@ -124,3 +124,75 @@ type ChatMessageWithUser struct {
 	ChatMessage
 	User *PublicUser `json:"user"`
 }
+
+// =====================================================================
+// === Short* —— 短视频专用类型 ===
+//
+// 与真实 DB schema 对齐（2026-05-13 服务器 mysqldump 验证过）：
+//   categories: id,name,slug,type,kind,parent_id,level,path,icon,cover,description,sort,is_active,...
+//   videos:     id,user_id,category_id,type,title,description,cover,url,md5,size_bytes,
+//               duration,views,likes,comments_count,favorites*,shares*,status,
+//               audit_status,audit_note,audited_by,audited_at,published_at,...
+//   * favorites / shares 列由 migration 2026_05_12_000000_extend_videos_for_shorts 添加
+// =====================================================================
+
+// === ShortCategory ===
+// categories 表 type='short' 的子集
+type ShortCategory struct {
+	ID          int64         `db:"id"          json:"id"`
+	Name        string        `db:"name"        json:"name"`
+	Slug        string        `db:"slug"        json:"slug"`
+	ParentID    sql.NullInt64 `db:"parent_id"   json:"parent_id"`
+	Icon        *string       `db:"icon"        json:"icon"`
+	Cover       *string       `db:"cover"       json:"cover"`
+	Description *string       `db:"description" json:"description"`
+	Sort        int           `db:"sort"        json:"sort"`
+	IsActive    bool          `db:"is_active"   json:"is_active"`
+}
+
+// === ShortVideo ===
+// videos 表 type='short' 的子集
+type ShortVideo struct {
+	ID            int64        `db:"id"             json:"id"`
+	UserID        int64        `db:"user_id"        json:"user_id"`
+	CategoryID    int64        `db:"category_id"    json:"category_id"`
+	Title         string       `db:"title"          json:"title"`
+	Description   *string      `db:"description"    json:"description"`
+	Cover         *string      `db:"cover"          json:"cover"`
+	URL           string       `db:"url"            json:"url"`
+	Duration      int          `db:"duration"       json:"duration"`
+	Views         int64        `db:"views"          json:"views"`
+	Likes         int64        `db:"likes"          json:"likes"`
+	CommentsCount int64        `db:"comments_count" json:"comments_count"`
+	Favorites     int64        `db:"favorites"      json:"favorites"`
+	Shares        int64        `db:"shares"         json:"shares"`
+	Status        string       `db:"status"         json:"status"`
+	AuditStatus   string       `db:"audit_status"   json:"audit_status"`
+	PublishedAt   sql.NullTime `db:"published_at"   json:"published_at"`
+	CreatedAt     time.Time    `db:"created_at"     json:"created_at"`
+}
+
+// ShortVideoWithRelations: ShortVideo + 关联 user / category（API 输出形态）
+type ShortVideoWithRelations struct {
+	ShortVideo
+	User     *PublicUser    `json:"user"`
+	Category *ShortCategory `json:"category"`
+}
+
+// === ShortVideoComment ===
+// short_video_comments 表
+type ShortVideoComment struct {
+	ID        int64         `db:"id"         json:"id"`
+	UserID    int64         `db:"user_id"    json:"user_id"`
+	VideoID   int64         `db:"video_id"   json:"video_id"`
+	ParentID  sql.NullInt64 `db:"parent_id"  json:"parent_id"`
+	Content   string        `db:"content"    json:"content"`
+	Likes     int           `db:"likes"      json:"likes"`
+	CreatedAt time.Time     `db:"created_at" json:"created_at"`
+}
+
+type ShortVideoCommentWithUser struct {
+	ShortVideoComment
+	User    *PublicUser                 `json:"user"`
+	Replies []ShortVideoCommentWithUser `json:"replies,omitempty"`
+}
