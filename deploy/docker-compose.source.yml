@@ -1,0 +1,20 @@
+services:
+  api:
+    image: video-api:local
+    pull_policy: never
+    build:
+      context: ./api
+    environment:
+      CORS_ORIGINS: "https://${WEB_DOMAIN}"
+
+  admin:
+    image: video-admin:local
+    pull_policy: never
+    build:
+      context: ./admin
+
+  web:
+    image: video-web:local
+    pull_policy: never
+    build:
+      context: ./web

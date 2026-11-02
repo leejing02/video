@@ -1,0 +1,264 @@
+# =====================================================================
+# docker-compose.prod.yml — 生产环境（GHCR 镜像）
+#
+# 使用方式：
+#   docker compose --env-file .env.prod -f deploy/docker-compose.prod.yml <command>
+#   推荐通过 deploy.sh 操作：./deploy.sh init / update / logs
+#
+# 镜像由 GitHub Actions build-push.yml 构建并推送到 GHCR：
+#   ghcr.io/leejing02/video-api
+#   ghcr.io/leejing02/video-admin
+#   ghcr.io/leejing02/video-web
+#
+# IMAGE_TAG 由 deploy.sh / GitHub Actions 注入（如 sha-a1b2c3d 或 main）
+#
+# 域名（提前配 DNS A 记录）：
+#   ${ADMIN_DOMAIN}           后台
+#   ${API_DOMAIN}             Go API + WebSocket
+#   traefik.${ADMIN_DOMAIN}   Traefik Dashboard
+#
+# secrets 全部来自 .env.prod（gitignored）
+# 模板见 env/.env.prod.example
+# =====================================================================
+
+name: video-prod
+
+services:
+
+  # ---------------------------------------------------------------
+  # 1. Traefik（HTTPS + Let's Encrypt）
+  # ---------------------------------------------------------------
+  traefik:
+    image: traefik:v3.7.17
+    container_name: video-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=video-prod_video
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --api.dashboard=true
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_acme:/acme
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik-dash.rule=Host(`traefik.${ADMIN_DOMAIN}`)
+      - traefik.http.routers.traefik-dash.entrypoints=websecure
+      - traefik.http.routers.traefik-dash.tls.certresolver=le
+      - traefik.http.routers.traefik-dash.service=api@internal
+      - traefik.http.routers.traefik-dash.middlewares=traefik-auth
+      - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 2. MySQL
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: video-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${DB_NAME}"
+      MYSQL_USER: "${DB_USER}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=256M
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./api/migrations/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./api/migrations/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 3. Redis
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: video-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 4. Go API（GHCR 镜像）
+  # ---------------------------------------------------------------
+  api:
+    image: ghcr.io/leejing02/video-api:${IMAGE_TAG:-main}
+    pull_policy: always
+    container_name: video-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: "8000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      DB_PARAMS: "charset=utf8mb4&parseTime=true&loc=Local"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_TTL_HOURS: "${JWT_TTL_HOURS:-720}"
+      CORS_ORIGINS: "https://${ADMIN_DOMAIN},https://${API_DOMAIN}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls.certresolver=le
+      - traefik.http.services.api.loadbalancer.server.port=8000
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 5. Laravel + Filament 后台（GHCR 镜像）
+  # ---------------------------------------------------------------
+  admin:
+    image: ghcr.io/leejing02/video-admin:${IMAGE_TAG:-main}
+    pull_policy: always
+    container_name: video-admin
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: "${APP_KEY}"
+      APP_URL: "https://${ADMIN_DOMAIN}"
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_NAME}"
+      DB_USERNAME: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - admin_storage:/var/www/html/storage
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.admin.rule=Host(`${ADMIN_DOMAIN}`)
+      - traefik.http.routers.admin.entrypoints=websecure
+      - traefik.http.routers.admin.tls.certresolver=le
+      - traefik.http.services.admin.loadbalancer.server.port=80
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 6. Web 前端（GHCR 镜像，nginx + Vue 静态文件）
+  # ---------------------------------------------------------------
+  web:
+    image: ghcr.io/leejing02/video-web:${IMAGE_TAG:-main}
+    pull_policy: always
+    container_name: video-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "80"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.web.rule=Host(`${WEB_DOMAIN:-${API_DOMAIN}}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls.certresolver=le
+      - traefik.http.services.web.loadbalancer.server.port=80
+    networks: [video]
+
+  # ---------------------------------------------------------------
+  # 7. 数据库定时备份（本地构建，infra 专用）
+  # ---------------------------------------------------------------
+  backup:
+    build:
+      context: ./ops/backup
+      dockerfile: Dockerfile
+    container_name: video-backup
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      OSS_ENDPOINT: "${OSS_ENDPOINT:-}"
+      OSS_BUCKET: "${OSS_BUCKET:-}"
+      OSS_AK: "${OSS_AK:-}"
+      OSS_SK: "${OSS_SK:-}"
+      LOCAL_KEEP_DAYS: "${LOCAL_KEEP_DAYS:-7}"
+      OSS_KEEP_DAYS: "${OSS_KEEP_DAYS:-30}"
+      NOTIFY_WEBHOOK: "${NOTIFY_WEBHOOK:-}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - backup_data:/backups
+    networks: [video]
+
+volumes:
+  mysql_data:
+  redis_data:
+  traefik_acme:
+  admin_storage:
+  backup_data:
+
+networks:
+  video:
+    driver: bridge

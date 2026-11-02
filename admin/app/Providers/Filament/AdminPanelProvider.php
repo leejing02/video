@@ -26,6 +26,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            ->authGuard('admin')
             ->login()
             ->profile()                 // /admin/profile：管理员自己改密码 / 邮箱
             ->passwordReset()           // 忘记密码（邮件链接）

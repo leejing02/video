@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 
@@ -90,7 +89,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 		Content:    req.Content,
 	}
 	if req.ReplyToID != nil {
-		m.ReplyToID = sql.NullInt64{Int64: *req.ReplyToID, Valid: true}
+		m.ReplyToID = req.ReplyToID
 	}
 	if req.AttachmentURL != "" {
 		m.AttachmentURL = &req.AttachmentURL
@@ -121,6 +120,18 @@ func (h *ChatHandler) Join(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "global": true})
 		return
 	}
+	// Direct rooms are private: joining must not create a new participant.
+	if r.Kind == "direct" {
+		isMember, err := h.Chat.IsMember(roomID, uid)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if !isMember {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member"})
+			return
+		}
+	}
 	if err := h.Chat.Join(roomID, uid); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -132,6 +143,9 @@ func (h *ChatHandler) Join(c *gin.Context) {
 func (h *ChatHandler) MarkRead(c *gin.Context) {
 	roomID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	uid := middleware.CurrentUserID(c)
+	if err := h.ensureCanRead(c, roomID); err != nil {
+		return
+	}
 	if err := h.Chat.MarkRead(roomID, uid); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

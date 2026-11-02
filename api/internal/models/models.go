@@ -23,6 +23,17 @@ type User struct {
 	UpdatedAt       time.Time    `db:"updated_at"       json:"updated_at"`
 }
 
+// === BaziChart ===
+type BaziChart struct {
+	ID        int64     `db:"id"         json:"id"`
+	UserID    int64     `db:"user_id"    json:"user_id"`
+	Token     string    `db:"token"      json:"token"`
+	Birthday  string    `db:"birthday"   json:"birthday"`
+	Gender    string    `db:"gender"     json:"gender"`
+	ChartData string    `db:"chart_data" json:"chart_data"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
 // === Category ===
 type Category struct {
 	ID        int64     `db:"id"         json:"id"`
@@ -39,22 +50,24 @@ type Category struct {
 
 // === Video ===
 type Video struct {
-	ID            int64        `db:"id"             json:"id"`
-	UserID        int64        `db:"user_id"        json:"user_id"`
-	CategoryID    int64        `db:"category_id"    json:"category_id"`
-	Type          string       `db:"type"           json:"type"`
-	Title         string       `db:"title"          json:"title"`
-	Description   *string      `db:"description"    json:"description"`
-	Cover         *string      `db:"cover"          json:"cover"`
-	URL           string       `db:"url"            json:"url"`
-	Duration      int          `db:"duration"       json:"duration"`
-	Views         int64        `db:"views"          json:"views"`
-	Likes         int64        `db:"likes"          json:"likes"`
-	CommentsCount int64        `db:"comments_count" json:"comments_count"`
-	Status        string       `db:"status"         json:"status"`
-	PublishedAt   sql.NullTime `db:"published_at"   json:"published_at"`
-	CreatedAt     time.Time    `db:"created_at"     json:"created_at"`
-	UpdatedAt     time.Time    `db:"updated_at"     json:"updated_at"`
+	ID            int64      `db:"id"             json:"id"`
+	UserID        int64      `db:"user_id"        json:"user_id"`
+	CategoryID    int64      `db:"category_id"    json:"category_id"`
+	Type          string     `db:"type"           json:"type"`
+	Title         string     `db:"title"          json:"title"`
+	Description   *string    `db:"description"    json:"description"`
+	Cover         *string    `db:"cover"          json:"cover"`
+	URL           string     `db:"url"            json:"url"`
+	Duration      int        `db:"duration"       json:"duration"`
+	Views         int64      `db:"views"          json:"views"`
+	Likes         int64      `db:"likes"          json:"likes"`
+	CommentsCount int64      `db:"comments_count" json:"comments_count"`
+	Favorites     int64      `db:"favorites"      json:"favorites"`
+	Shares        int64      `db:"shares"         json:"shares"`
+	Status        string     `db:"status"         json:"status"`
+	PublishedAt   *time.Time `db:"published_at"   json:"published_at"`
+	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
+	UpdatedAt     time.Time  `db:"updated_at"     json:"updated_at"`
 }
 
 // VideoWithRelations Video + 关联的 user / category（拼装用）
@@ -74,15 +87,15 @@ type PublicUser struct {
 
 // === Comment ===
 type Comment struct {
-	ID        int64         `db:"id"         json:"id"`
-	UserID    int64         `db:"user_id"    json:"user_id"`
-	VideoID   int64         `db:"video_id"   json:"video_id"`
-	ParentID  sql.NullInt64 `db:"parent_id"  json:"parent_id"`
-	Content   string        `db:"content"    json:"content"`
-	Likes     int           `db:"likes"      json:"likes"`
-	IsPinned  bool          `db:"is_pinned"  json:"is_pinned"`
-	CreatedAt time.Time     `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time     `db:"updated_at" json:"updated_at"`
+	ID        int64     `db:"id"         json:"id"`
+	UserID    int64     `db:"user_id"    json:"user_id"`
+	VideoID   int64     `db:"video_id"   json:"video_id"`
+	ParentID  *int64    `db:"parent_id"  json:"parent_id"`
+	Content   string    `db:"content"    json:"content"`
+	Likes     int       `db:"likes"      json:"likes"`
+	IsPinned  bool      `db:"is_pinned"  json:"is_pinned"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
 type CommentWithUser struct {
@@ -93,31 +106,31 @@ type CommentWithUser struct {
 
 // === ChatRoom ===
 type ChatRoom struct {
-	ID            int64         `db:"id"               json:"id"`
-	Name          string        `db:"name"             json:"name"`
-	Slug          string        `db:"slug"             json:"slug"`
-	Description   *string       `db:"description"      json:"description"`
-	Cover         *string       `db:"cover"            json:"cover"`
-	Kind          string        `db:"kind"             json:"kind"`
-	IsActive      bool          `db:"is_active"        json:"is_active"`
-	OwnerID       sql.NullInt64 `db:"owner_id"         json:"owner_id"`
-	LastMessageAt sql.NullTime  `db:"last_message_at"  json:"last_message_at"`
-	CreatedAt     time.Time     `db:"created_at"       json:"created_at"`
-	UpdatedAt     time.Time     `db:"updated_at"       json:"updated_at"`
+	ID            int64      `db:"id"               json:"id"`
+	Name          string     `db:"name"             json:"name"`
+	Slug          string     `db:"slug"             json:"slug"`
+	Description   *string    `db:"description"      json:"description"`
+	Cover         *string    `db:"cover"            json:"cover"`
+	Kind          string     `db:"kind"             json:"kind"`
+	IsActive      bool       `db:"is_active"        json:"is_active"`
+	OwnerID       *int64     `db:"owner_id"         json:"owner_id"`
+	LastMessageAt *time.Time `db:"last_message_at"  json:"last_message_at"`
+	CreatedAt     time.Time  `db:"created_at"       json:"created_at"`
+	UpdatedAt     time.Time  `db:"updated_at"       json:"updated_at"`
 }
 
 // === ChatMessage ===
 type ChatMessage struct {
-	ID            int64         `db:"id"             json:"id"`
-	ChatRoomID    int64         `db:"chat_room_id"   json:"chat_room_id"`
-	UserID        int64         `db:"user_id"        json:"user_id"`
-	Type          string        `db:"type"           json:"type"`
-	Content       string        `db:"content"        json:"content"`
-	ReplyToID     sql.NullInt64 `db:"reply_to_id"    json:"reply_to_id"`
-	AttachmentURL *string       `db:"attachment_url" json:"attachment_url"`
-	Meta          *string       `db:"meta"           json:"meta"`
-	CreatedAt     time.Time     `db:"created_at"     json:"created_at"`
-	UpdatedAt     time.Time     `db:"updated_at"     json:"updated_at"`
+	ID            int64     `db:"id"             json:"id"`
+	ChatRoomID    int64     `db:"chat_room_id"   json:"chat_room_id"`
+	UserID        int64     `db:"user_id"        json:"user_id"`
+	Type          string    `db:"type"           json:"type"`
+	Content       string    `db:"content"        json:"content"`
+	ReplyToID     *int64    `db:"reply_to_id"    json:"reply_to_id"`
+	AttachmentURL *string   `db:"attachment_url" json:"attachment_url"`
+	Meta          *string   `db:"meta"           json:"meta"`
+	CreatedAt     time.Time `db:"created_at"     json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"     json:"updated_at"`
 }
 
 type ChatMessageWithUser struct {
@@ -139,37 +152,36 @@ type ChatMessageWithUser struct {
 // === ShortCategory ===
 // categories 表 type='short' 的子集
 type ShortCategory struct {
-	ID          int64         `db:"id"          json:"id"`
-	Name        string        `db:"name"        json:"name"`
-	Slug        string        `db:"slug"        json:"slug"`
-	ParentID    sql.NullInt64 `db:"parent_id"   json:"parent_id"`
-	Icon        *string       `db:"icon"        json:"icon"`
-	Cover       *string       `db:"cover"       json:"cover"`
-	Description *string       `db:"description" json:"description"`
-	Sort        int           `db:"sort"        json:"sort"`
-	IsActive    bool          `db:"is_active"   json:"is_active"`
+	ID          int64   `db:"id"          json:"id"`
+	Name        string  `db:"name"        json:"name"`
+	Slug        string  `db:"slug"        json:"slug"`
+	ParentID    *int64  `db:"parent_id"   json:"parent_id"`
+	Icon        *string `db:"icon"        json:"icon"`
+	Cover       *string `db:"cover"       json:"cover"`
+	Description *string `db:"description" json:"description"`
+	Sort        int     `db:"sort"        json:"sort"`
+	IsActive    bool    `db:"is_active"   json:"is_active"`
 }
 
 // === ShortVideo ===
 // videos 表 type='short' 的子集
 type ShortVideo struct {
-	ID            int64        `db:"id"             json:"id"`
-	UserID        int64        `db:"user_id"        json:"user_id"`
-	CategoryID    int64        `db:"category_id"    json:"category_id"`
-	Title         string       `db:"title"          json:"title"`
-	Description   *string      `db:"description"    json:"description"`
-	Cover         *string      `db:"cover"          json:"cover"`
-	URL           string       `db:"url"            json:"url"`
-	Duration      int          `db:"duration"       json:"duration"`
-	Views         int64        `db:"views"          json:"views"`
-	Likes         int64        `db:"likes"          json:"likes"`
-	CommentsCount int64        `db:"comments_count" json:"comments_count"`
-	Favorites     int64        `db:"favorites"      json:"favorites"`
-	Shares        int64        `db:"shares"         json:"shares"`
-	Status        string       `db:"status"         json:"status"`
-	AuditStatus   string       `db:"audit_status"   json:"audit_status"`
-	PublishedAt   sql.NullTime `db:"published_at"   json:"published_at"`
-	CreatedAt     time.Time    `db:"created_at"     json:"created_at"`
+	ID            int64      `db:"id"             json:"id"`
+	UserID        int64      `db:"user_id"        json:"user_id"`
+	CategoryID    int64      `db:"category_id"    json:"category_id"`
+	Title         string     `db:"title"          json:"title"`
+	Description   *string    `db:"description"    json:"description"`
+	Cover         *string    `db:"cover"          json:"cover"`
+	URL           string     `db:"url"            json:"url"`
+	Duration      int        `db:"duration"       json:"duration"`
+	Views         int64      `db:"views"          json:"views"`
+	Likes         int64      `db:"likes"          json:"likes"`
+	CommentsCount int64      `db:"comments_count" json:"comments_count"`
+	Favorites     int64      `db:"favorites"      json:"favorites"`
+	Shares        int64      `db:"shares"         json:"shares"`
+	Status        string     `db:"status"         json:"status"`
+	PublishedAt   *time.Time `db:"published_at"   json:"published_at"`
+	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
 }
 
 // ShortVideoWithRelations: ShortVideo + 关联 user / category（API 输出形态）
@@ -182,13 +194,13 @@ type ShortVideoWithRelations struct {
 // === ShortVideoComment ===
 // short_video_comments 表
 type ShortVideoComment struct {
-	ID        int64         `db:"id"         json:"id"`
-	UserID    int64         `db:"user_id"    json:"user_id"`
-	VideoID   int64         `db:"video_id"   json:"video_id"`
-	ParentID  sql.NullInt64 `db:"parent_id"  json:"parent_id"`
-	Content   string        `db:"content"    json:"content"`
-	Likes     int           `db:"likes"      json:"likes"`
-	CreatedAt time.Time     `db:"created_at" json:"created_at"`
+	ID        int64     `db:"id"         json:"id"`
+	UserID    int64     `db:"user_id"    json:"user_id"`
+	VideoID   int64     `db:"video_id"   json:"video_id"`
+	ParentID  *int64    `db:"parent_id"  json:"parent_id"`
+	Content   string    `db:"content"    json:"content"`
+	Likes     int       `db:"likes"      json:"likes"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
 
 type ShortVideoCommentWithUser struct {

@@ -2,12 +2,12 @@
 
 namespace App\Policies;
 
+use App\Domains\User\Models\AdminUser;
 use App\Models\Category;
-use App\Models\User;
 
 class CategoryPolicy
 {
-    public function before(User $user): ?bool
+    public function before(AdminUser $user): ?bool
     {
         return $user->isSuperAdmin() ? true : null;
     }
@@ -23,27 +23,27 @@ class CategoryPolicy
         return "{$resource}.{$action}";
     }
 
-    public function viewAny(User $user): bool
+    public function viewAny(AdminUser $user): bool
     {
         return $user->canAny(['long_category.view', 'short_category.view']);
     }
 
-    public function view(User $user, Category $r): bool
+    public function view(AdminUser $user, Category $r): bool
     {
         return $user->can($this->permFor($r, 'view'));
     }
 
-    public function create(User $user): bool
+    public function create(AdminUser $user): bool
     {
         return $user->canAny(['long_category.create', 'short_category.create']);
     }
 
-    public function update(User $user, Category $r): bool
+    public function update(AdminUser $user, Category $r): bool
     {
         return $user->can($this->permFor($r, 'update'));
     }
 
-    public function delete(User $user, Category $r): bool
+    public function delete(AdminUser $user, Category $r): bool
     {
         return $user->can($this->permFor($r, 'delete'));
     }

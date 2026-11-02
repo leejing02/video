@@ -77,7 +77,7 @@ class ChatRoomResource extends Resource
                         'primary' => ChatRoom::KIND_GROUP,
                         'gray'    => ChatRoom::KIND_DIRECT,
                     ])
-                    ->formatStateUsing(fn ($s) => match ($s) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         ChatRoom::KIND_GLOBAL => '全局',
                         ChatRoom::KIND_GROUP  => '普通群',
                         ChatRoom::KIND_DIRECT => '私聊',

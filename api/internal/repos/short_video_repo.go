@@ -27,7 +27,7 @@ func (r *ShortVideoRepo) List(f ListShortVideoFilter) ([]models.ShortVideoWithRe
 	conds := []string{"v.type = 'short'"}
 
 	if !f.IncludeAll {
-		conds = append(conds, "v.status = 'published'", "v.audit_status = 'approved'")
+		conds = append(conds, "v.status = 'published'")
 	}
 	args := []any{}
 	if f.CategoryID > 0 {
@@ -72,7 +72,7 @@ func (r *ShortVideoRepo) List(f ListShortVideoFilter) ([]models.ShortVideoWithRe
 		SELECT
 			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.url,
 			v.duration, v.views, v.likes, v.comments_count, v.favorites, v.shares,
-			v.status, v.audit_status, v.published_at, v.created_at,
+			v.status, v.published_at, v.created_at,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,
 			c.id  AS c_id, c.name AS c_name, c.slug AS c_slug, c.icon AS c_icon
 		FROM videos v
@@ -118,7 +118,7 @@ func (r *ShortVideoRepo) FindByID(id int64) (*models.ShortVideoWithRelations, er
 		SELECT
 			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.url,
 			v.duration, v.views, v.likes, v.comments_count, v.favorites, v.shares,
-			v.status, v.audit_status, v.published_at, v.created_at,
+			v.status, v.published_at, v.created_at,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,
 			c.id  AS c_id, c.name AS c_name, c.slug AS c_slug, c.icon AS c_icon
 		FROM videos v
@@ -248,7 +248,7 @@ func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]model
 		UAv  *string `db:"u_avatar"`
 	}{}
 	q := `
-		SELECT c.*,
+		SELECT c.id, c.user_id, c.video_id, c.parent_id, c.content, c.likes, c.created_at,
 		       u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
 		FROM short_video_comments c
 		JOIN users u ON u.id = c.user_id
@@ -280,7 +280,7 @@ func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]model
 			UAv  *string `db:"u_avatar"`
 		}{}
 		rq := `
-			SELECT c.*,
+			SELECT c.id, c.user_id, c.video_id, c.parent_id, c.content, c.likes, c.created_at,
 			       u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
 			FROM short_video_comments c
 			JOIN users u ON u.id = c.user_id

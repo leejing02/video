@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 
@@ -41,12 +40,10 @@ func (h *CommentHandler) Create(c *gin.Context) {
 		return
 	}
 	cmt := &models.Comment{
-		UserID:  uid,
-		VideoID: videoID,
-		Content: req.Content,
-	}
-	if req.ParentID != nil {
-		cmt.ParentID = sql.NullInt64{Int64: *req.ParentID, Valid: true}
+		UserID:   uid,
+		VideoID:  videoID,
+		Content:  req.Content,
+		ParentID: req.ParentID,
 	}
 	if err := h.Comments.Create(cmt); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -1,0 +1,193 @@
+# =====================================================================
+# docker-compose.staging.yml — Staging 环境
+#
+# 使用方式：
+#   docker compose --env-file .env.staging -f deploy/docker-compose.staging.yml <cmd>
+#   或 ./deploy.sh staging-update
+#
+# 特点：
+#   - 使用 GHCR :develop 标签（或 IMAGE_TAG 指定 sha）
+#   - 共享生产 Traefik（video-prod_video network external）
+#     → 前提：prod 的 traefik 容器已在运行
+#   - 完全隔离的 MySQL / Redis / 数据卷（前缀 staging_）
+#   - 域名：staging-${ADMIN_DOMAIN} / staging-${API_DOMAIN}
+#
+# Secrets：.env.staging（gitignored），模板见 env/.env.staging.example
+# =====================================================================
+
+name: video-staging
+
+services:
+
+  # ---------------------------------------------------------------
+  # MySQL（staging 专属）
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: video-staging-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${DB_NAME}"
+      MYSQL_USER: "${DB_USER}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./api/migrations/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./api/migrations/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [staging]
+
+  # ---------------------------------------------------------------
+  # Redis（staging 专属）
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: video-staging-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [staging]
+
+  # ---------------------------------------------------------------
+  # Go API（GHCR :develop 或 IMAGE_TAG）
+  # ---------------------------------------------------------------
+  api:
+    image: ghcr.io/leejing02/video-api:${IMAGE_TAG:-develop}
+    pull_policy: always
+    container_name: video-staging-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      APP_PORT: "8000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      DB_PARAMS: "charset=utf8mb4&parseTime=true&loc=Local"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_TTL_HOURS: "168"
+      CORS_ORIGINS: "https://staging-${ADMIN_DOMAIN},https://staging-${API_DOMAIN}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.staging-api.rule=Host(`staging-${API_DOMAIN}`)
+      - traefik.http.routers.staging-api.entrypoints=websecure
+      - traefik.http.routers.staging-api.tls.certresolver=le
+      - traefik.http.services.staging-api.loadbalancer.server.port=8000
+    networks: [staging, traefik]
+
+  # ---------------------------------------------------------------
+  # Laravel Admin（GHCR :develop 或 IMAGE_TAG）
+  # ---------------------------------------------------------------
+  admin:
+    image: ghcr.io/leejing02/video-admin:${IMAGE_TAG:-develop}
+    pull_policy: always
+    container_name: video-staging-admin
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      APP_DEBUG: "true"
+      APP_KEY: "${APP_KEY}"
+      APP_URL: "https://staging-${ADMIN_DOMAIN}"
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_NAME}"
+      DB_USERNAME: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      TRUSTED_PROXIES: "*"
+      LOG_CHANNEL: stderr
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - admin_storage:/var/www/html/storage
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.staging-admin.rule=Host(`staging-${ADMIN_DOMAIN}`)
+      - traefik.http.routers.staging-admin.entrypoints=websecure
+      - traefik.http.routers.staging-admin.tls.certresolver=le
+      - traefik.http.services.staging-admin.loadbalancer.server.port=80
+    networks: [staging, traefik]
+
+  # ---------------------------------------------------------------
+  # Web 前端（GHCR :develop 或 IMAGE_TAG）
+  # ---------------------------------------------------------------
+  web:
+    image: ghcr.io/leejing02/video-web:${IMAGE_TAG:-develop}
+    pull_policy: always
+    container_name: video-staging-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "80"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=video-prod_video
+      - traefik.http.routers.staging-web.rule=Host(`staging-${WEB_DOMAIN:-${API_DOMAIN}}`)
+      - traefik.http.routers.staging-web.entrypoints=websecure
+      - traefik.http.routers.staging-web.tls.certresolver=le
+      - traefik.http.services.staging-web.loadbalancer.server.port=80
+    networks: [staging, traefik]
+
+volumes:
+  mysql_data:
+  redis_data:
+  admin_storage:
+
+networks:
+  # staging 内部网络
+  staging:
+    driver: bridge
+  # 连接到 prod Traefik（video-prod_video），让 Traefik 识别 staging 路由
+  traefik:
+    external: true
+    name: video-prod_video

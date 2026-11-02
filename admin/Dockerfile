@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.6
 # ============================================================
 # Laravel 11 + Filament v3 + Nginx 单容器
 # php-fpm + nginx 用 supervisor 一起拉起
@@ -20,6 +19,7 @@ RUN apk add --no-cache \
         icu icu-dev \
         libzip-dev \
         mysql-client \
+        $PHPIZE_DEPS \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo_mysql \
@@ -29,7 +29,10 @@ RUN apk add --no-cache \
         intl \
         zip \
         opcache \
-    && rm -rf /var/cache/apk/*
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del $PHPIZE_DEPS \
+    && rm -rf /var/cache/apk/* /tmp/pear
 
 # ---------- composer ----------
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

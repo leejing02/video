@@ -28,8 +28,11 @@ func main() {
 	userRepo := repos.NewUserRepo(dbx)
 	catRepo := repos.NewCategoryRepo(dbx)
 	vidRepo := repos.NewVideoRepo(dbx)
+	shortVidRepo := repos.NewShortVideoRepo(dbx)
 	cmtRepo := repos.NewCommentRepo(dbx)
 	chatRepo := repos.NewChatRepo(dbx)
+	liveRepo := repos.NewLiveRepo(dbx)
+	baziRepo := repos.NewBaziRepo(dbx)
 
 	// WebSocket Hub
 	hub := ws.NewHub()
@@ -39,8 +42,14 @@ func main() {
 	authH := &handlers.AuthHandler{Users: userRepo, Chat: chatRepo, JWTSecret: cfg.JWTSecret, JWTTTLHrs: cfg.JWTTTLHrs}
 	catH := &handlers.CategoryHandler{Categories: catRepo}
 	vidH := &handlers.VideoHandler{Videos: vidRepo}
+	shortVidH := &handlers.ShortVideoHandler{Repo: shortVidRepo}
 	cmtH := &handlers.CommentHandler{Comments: cmtRepo}
 	chatH := &handlers.ChatHandler{Chat: chatRepo, Hub: hub, JWTSecret: cfg.JWTSecret}
+	liveH := &handlers.LiveHandler{Repo: liveRepo}
+	dreamH := &handlers.DreamHandler{AnthropicKey: cfg.AnthropicKey}
+	baziH := &handlers.BaziHandler{AnthropicKey: cfg.AnthropicKey, Repo: baziRepo}
+	ogH := &handlers.OGHandler{Repo: baziRepo, WebDistPath: cfg.WebDistPath}
+	fishingH := &handlers.FishingHandler{}
 
 	// Gin
 	if cfg.AppEnv == "production" {
@@ -57,6 +66,13 @@ func main() {
 	// 健康检查
 	r.GET("/up", func(c *gin.Context) { c.String(200, "ok") })
 
+	// 八字命盘分享（公开）
+	r.GET("/api/bazi/chart/:token", baziH.GetChart)
+	// OG 分享卡 — /chart/:token 注入 OG meta tags 后返回 Vue SPA
+	r.GET("/chart/:token", ogH.ServeChart)
+	// OG 预览图
+	r.GET("/api/og/chart/:token", ogH.ServeImage)
+
 	api := r.Group("/api")
 
 	// === 公开接口 ===
@@ -67,6 +83,17 @@ func main() {
 	api.GET("/videos/:id", vidH.Show)
 	api.GET("/videos/:id/comments", cmtH.List)
 	api.GET("/chat/global", chatH.Global)
+
+	// 短视频公开接口
+	api.GET("/short-categories", shortVidH.ListCategories)
+	api.GET("/short-videos", shortVidH.List)
+	api.GET("/short-videos/:id", shortVidH.Show)
+	api.GET("/short-videos/:id/comments", shortVidH.ListComments)
+	api.GET("/short-videos/:id/share", shortVidH.Share)
+
+	// 直播公开接口
+	api.GET("/live-categories", liveH.ListCategories)
+	api.GET("/live-streams", liveH.List)
 
 	// === 需要登录 ===
 	authMW := middleware.AuthRequired(cfg.JWTSecret)
@@ -80,8 +107,21 @@ func main() {
 		priv.POST("/videos/:id/like", vidH.Like)
 		priv.GET("/me/videos", vidH.Mine)
 
+		// 短视频互动
+		priv.POST("/short-videos/:id/like", shortVidH.Like)
+		priv.POST("/short-videos/:id/favorite", shortVidH.Favorite)
+		priv.POST("/short-videos/:id/comments", shortVidH.CreateComment)
+		priv.GET("/me/short-videos", shortVidH.Mine)
+
 		priv.POST("/videos/:id/comments", cmtH.Create)
 		priv.DELETE("/comments/:id", cmtH.Delete)
+
+		priv.POST("/dreams/interpret", dreamH.Interpret)
+		priv.POST("/bazi/calculate", baziH.Calculate)
+
+		// 捕鱼游戏
+		priv.POST("/fishing/fire", fishingH.Fire)
+		priv.GET("/fishing/balance", fishingH.Balance)
 
 		priv.GET("/chat/rooms", chatH.MyRooms)
 		priv.GET("/chat/rooms/:id/messages", chatH.Messages)
@@ -92,6 +132,11 @@ func main() {
 
 	// WebSocket（query 里带 token）
 	r.GET("/ws/chat", chatH.WSConnect)
+
+	// 启动时打印所有注册的路由，方便验证 binary 是否包含最新代码
+	for _, info := range r.Routes() {
+		log.Printf("route  %-6s %s", info.Method, info.Path)
+	}
 
 	addr := ":" + cfg.AppPort
 	log.Printf("video-api listening on %s (env=%s)", addr, cfg.AppEnv)

@@ -43,7 +43,7 @@ func (h *VideoHandler) Show(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if v == nil {
+	if v == nil || v.Status != "published" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}

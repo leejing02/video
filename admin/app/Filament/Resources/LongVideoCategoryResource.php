@@ -25,7 +25,7 @@ class LongVideoCategoryResource extends CategoryResource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->whereIn('kind', [Category::KIND_LONG, Category::KIND_BOTH]);
+            ->where('type', Category::TYPE_VIDEO);
     }
 
     public static function form(Form $form): Form
@@ -41,14 +41,7 @@ class LongVideoCategoryResource extends CategoryResource
                     ->label('Slug')
                     ->unique(ignoreRecord: true)
                     ->required(),
-                Forms\Components\Select::make('kind')
-                    ->label('使用范围')
-                    ->options([
-                        Category::KIND_LONG => '仅长视频',
-                        Category::KIND_BOTH => '通用（长 + 短）',
-                    ])
-                    ->default(Category::KIND_LONG)
-                    ->required(),
+                Forms\Components\Hidden::make('type')->default(Category::TYPE_VIDEO),
                 Forms\Components\TextInput::make('sort')->label('排序')->numeric()->default(0),
                 Forms\Components\TextInput::make('icon')
                     ->label('图标（CDN url 或 SF Symbol 名）')

@@ -73,7 +73,8 @@ func (r *VideoRepo) List(f ListVideoFilter) ([]models.VideoWithRelations, int64,
 		SELECT
 			v.*,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,
-			c.id  AS c_id, c.name AS c_name, c.slug AS c_slug, c.kind AS c_kind,
+			c.id   AS c_id, c.name AS c_name, c.slug AS c_slug,
+			CASE c.type WHEN 'video' THEN 'long' WHEN 'short' THEN 'short' ELSE COALESCE(c.kind, c.type) END AS c_kind,
 			c.icon AS c_icon, c.cover AS c_cover
 		FROM videos v
 		JOIN users      u ON u.id = v.user_id
@@ -110,16 +111,17 @@ func (r *VideoRepo) FindByID(id int64) (*models.VideoWithRelations, error) {
 		USnm string  `db:"u_username"`
 		UAv  *string `db:"u_avatar"`
 
-		CID  int64   `db:"c_id"`
-		CNm  string  `db:"c_name"`
-		CSlg string  `db:"c_slug"`
-		CKnd string  `db:"c_kind"`
+		CID  int64  `db:"c_id"`
+		CNm  string `db:"c_name"`
+		CSlg string `db:"c_slug"`
+		CKnd string `db:"c_kind"`
 	}{}
 	q := `
 		SELECT
 			v.*,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,
-			c.id  AS c_id, c.name AS c_name, c.slug AS c_slug, c.kind AS c_kind
+			c.id  AS c_id, c.name AS c_name, c.slug AS c_slug,
+			CASE c.type WHEN 'video' THEN 'long' WHEN 'short' THEN 'short' ELSE COALESCE(c.kind, c.type) END AS c_kind
 		FROM videos v
 		JOIN users u ON u.id = v.user_id
 		JOIN categories c ON c.id = v.category_id

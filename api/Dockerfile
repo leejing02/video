@@ -1,9 +1,8 @@
-# syntax=docker/dockerfile:1.6
 # ============================================================
 # Go API 多阶段构建：builder → distroless 运行时镜像（~15 MB）
 # ============================================================
 
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # 国内网络可解锁；不需要可删
 ENV GOPROXY=https://proxy.golang.org,direct \

@@ -67,7 +67,7 @@ class CommentResource extends Resource
                     ->wrap(),
                 Tables\Columns\TextColumn::make('parent_id')
                     ->label('层级')
-                    ->formatStateUsing(fn ($s) => $s ? '回复' : '顶级')
+                    ->formatStateUsing(fn ($state) => $state ? '回复' : '顶级')
                     ->badge(),
                 Tables\Columns\IconColumn::make('is_pinned')->boolean()->label('置顶'),
                 Tables\Columns\TextColumn::make('likes')->sortable()->label('点赞'),

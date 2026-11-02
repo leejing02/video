@@ -12,10 +12,21 @@ type ChatRepo struct{ DB *sqlx.DB }
 
 func NewChatRepo(db *sqlx.DB) *ChatRepo { return &ChatRepo{DB: db} }
 
-// GlobalRoom 拿全局聊天室
+// chat_rooms 真实 schema：
+//
+//	id, name, slug, description, cover, kind ENUM('global','group','direct'),
+//	is_active, owner_id, last_message_at, created_at, updated_at
+const chatRoomCols = `id, name, slug, description, cover, is_active, owner_id,
+		kind, last_message_at, created_at, updated_at`
+
+const chatMessageCols = `m.id, m.chat_room_id, m.user_id, m.type, m.content,
+		m.reply_to_id, m.attachment_url, m.meta, m.created_at, m.updated_at`
+
+// GlobalRoom 拿全局聊天室（slug='global' 那一行）
 func (r *ChatRepo) GlobalRoom() (*models.ChatRoom, error) {
 	var room models.ChatRoom
-	err := r.DB.Get(&room, `SELECT * FROM chat_rooms WHERE kind = 'global' AND is_active = 1 LIMIT 1`)
+	err := r.DB.Get(&room, `SELECT `+chatRoomCols+` FROM chat_rooms
+		WHERE slug = 'global' AND is_active = 1 LIMIT 1`)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -24,7 +35,7 @@ func (r *ChatRepo) GlobalRoom() (*models.ChatRoom, error) {
 
 func (r *ChatRepo) RoomByID(id int64) (*models.ChatRoom, error) {
 	var room models.ChatRoom
-	err := r.DB.Get(&room, `SELECT * FROM chat_rooms WHERE id = ?`, id)
+	err := r.DB.Get(&room, `SELECT `+chatRoomCols+` FROM chat_rooms WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -35,9 +46,13 @@ func (r *ChatRepo) RoomByID(id int64) (*models.ChatRoom, error) {
 func (r *ChatRepo) UserRooms(userID int64) ([]models.ChatRoom, error) {
 	out := []models.ChatRoom{}
 	err := r.DB.Select(&out, `
-		SELECT DISTINCT r.* FROM chat_rooms r
+		SELECT DISTINCT
+			r.id, r.name, r.slug, r.description, r.cover, r.is_active, r.owner_id,
+			r.kind,
+			r.last_message_at, r.created_at, r.updated_at
+		FROM chat_rooms r
 		LEFT JOIN chat_room_user pu ON pu.chat_room_id = r.id AND pu.user_id = ?
-		WHERE r.is_active = 1 AND (r.kind = 'global' OR pu.user_id = ?)
+		WHERE r.is_active = 1 AND (r.slug = 'global' OR pu.user_id = ?)
 		ORDER BY r.last_message_at DESC, r.id DESC
 	`, userID, userID)
 	return out, err
@@ -81,7 +96,7 @@ func (r *ChatRepo) Messages(roomID int64, beforeID int64, limit int) ([]models.C
 	}
 	rows := []row{}
 	q := `
-		SELECT m.*, u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
+		SELECT ` + chatMessageCols + `, u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
 		FROM chat_messages m JOIN users u ON u.id = m.user_id
 		WHERE m.chat_room_id = ?`
 	args := []any{roomID}
@@ -96,7 +111,6 @@ func (r *ChatRepo) Messages(roomID int64, beforeID int64, limit int) ([]models.C
 	}
 
 	out := make([]models.ChatMessageWithUser, 0, len(rows))
-	// 倒序变正序，更符合时间线
 	for i := len(rows) - 1; i >= 0; i-- {
 		rr := rows[i]
 		out = append(out, models.ChatMessageWithUser{
@@ -144,7 +158,7 @@ func (r *ChatRepo) LoadMessageWithUser(id int64) (*models.ChatMessageWithUser, e
 		UAv  *string `db:"u_avatar"`
 	}{}
 	err := r.DB.Get(&row, `
-		SELECT m.*, u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
+		SELECT `+chatMessageCols+`, u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
 		FROM chat_messages m JOIN users u ON u.id = m.user_id
 		WHERE m.id = ?`, id)
 	if err != nil {

@@ -39,7 +39,7 @@ class LatestVideosWidget extends BaseWidget
                         'primary' => Video::TYPE_LONG,
                         'success' => Video::TYPE_SHORT,
                     ])
-                    ->formatStateUsing(fn ($s) => $s === Video::TYPE_LONG ? '长视频' : '短视频'),
+                    ->formatStateUsing(fn ($state) => $state === Video::TYPE_LONG ? '长视频' : '短视频'),
                 Tables\Columns\TextColumn::make('category.name')->label('分类')->badge(),
                 Tables\Columns\TextColumn::make('user.name')->label('上传者'),
                 Tables\Columns\TextColumn::make('views')->label('播放')->sortable(),

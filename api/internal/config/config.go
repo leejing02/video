@@ -9,17 +9,27 @@ import (
 )
 
 type Config struct {
-	AppEnv     string
-	AppPort    string
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBParams   string
-	JWTSecret  string
-	JWTTTLHrs  int
-	CORS       string
+	AppEnv       string
+	AppPort      string
+	DBHost       string
+	DBPort       string
+	DBUser       string
+	DBPassword   string
+	DBName       string
+	DBParams     string
+	JWTSecret    string
+	JWTTTLHrs    int
+	CORS         string
+	AnthropicKey string
+	WebDistPath  string
+}
+
+// GamePort returns the fishing game server port (default 8001).
+func (c *Config) GamePort() string {
+	if p := os.Getenv("GAME_PORT"); p != "" {
+		return p
+	}
+	return "8001"
 }
 
 // DSN MySQL 连接字符串（go-sql-driver 格式）
@@ -35,17 +45,19 @@ func Load() *Config {
 	ttl, _ := strconv.Atoi(getEnv("JWT_TTL_HOURS", "720"))
 
 	return &Config{
-		AppEnv:     getEnv("APP_ENV", "development"),
-		AppPort:    getEnv("APP_PORT", "8000"),
-		DBHost:     getEnv("DB_HOST", "127.0.0.1"),
-		DBPort:     getEnv("DB_PORT", "3306"),
-		DBUser:     getEnv("DB_USER", "root"),
-		DBPassword: getEnv("DB_PASSWORD", ""),
-		DBName:     getEnv("DB_NAME", "video_platform"),
-		DBParams:   getEnv("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=Local"),
-		JWTSecret:  getEnv("JWT_SECRET", "change-me"),
-		JWTTTLHrs:  ttl,
-		CORS:       getEnv("CORS_ORIGINS", "*"),
+		AppEnv:       getEnv("APP_ENV", "development"),
+		AppPort:      getEnv("APP_PORT", "8000"),
+		DBHost:       getEnv("DB_HOST", "127.0.0.1"),
+		DBPort:       getEnv("DB_PORT", "3306"),
+		DBUser:       getEnv("DB_USER", "root"),
+		DBPassword:   getEnv("DB_PASSWORD", ""),
+		DBName:       getEnv("DB_NAME", "video_platform"),
+		DBParams:     getEnv("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=Local"),
+		JWTSecret:    getEnv("JWT_SECRET", "change-me"),
+		JWTTTLHrs:    ttl,
+		CORS:         getEnv("CORS_ORIGINS", "*"),
+		AnthropicKey: getEnv("ANTHROPIC_API_KEY", ""),
+		WebDistPath:  getEnv("WEB_DIST_PATH", "./web/dist"),
 	}
 }
 

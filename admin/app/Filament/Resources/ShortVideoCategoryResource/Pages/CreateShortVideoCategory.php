@@ -12,8 +12,8 @@ class CreateShortVideoCategory extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        if (empty($data['kind'])) {
-            $data['kind'] = Category::KIND_SHORT;
+        if (empty($data['type'])) {
+            $data['type'] = Category::TYPE_SHORT;
         }
         return $data;
     }

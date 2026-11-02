@@ -51,13 +51,14 @@ class VideoResource extends Resource
                             name: 'category',
                             titleAttribute: 'name',
                             modifyQueryUsing: function (Builder $query, Forms\Get $get) {
-                                $type = $get('type');
-                                if (! $type) {
-                                    return $query->where('is_active', true);
-                                }
-                                return $query
-                                    ->where('is_active', true)
-                                    ->whereIn('kind', [$type, Category::KIND_BOTH]);
+                                $videoType = $get('type');
+                                $catType   = match ($videoType) {
+                                    Video::TYPE_LONG  => Category::TYPE_VIDEO,
+                                    Video::TYPE_SHORT => Category::TYPE_SHORT,
+                                    default           => null,
+                                };
+                                $q = $query->where('is_active', true);
+                                return $catType ? $q->where('type', $catType) : $q;
                             }
                         )
                         ->searchable()
@@ -147,7 +148,7 @@ class VideoResource extends Resource
                         'primary' => Video::TYPE_LONG,
                         'success' => Video::TYPE_SHORT,
                     ])
-                    ->formatStateUsing(fn ($s) => $s === Video::TYPE_LONG ? '长视频' : '短视频'),
+                    ->formatStateUsing(fn ($state) => $state === Video::TYPE_LONG ? '长视频' : '短视频'),
                 Tables\Columns\TextColumn::make('category.name')
                     ->label('分类')
                     ->badge(),
@@ -161,7 +162,7 @@ class VideoResource extends Resource
                         'success' => Video::STATUS_PUBLISHED,
                         'danger'  => Video::STATUS_ARCHIVED,
                     ])
-                    ->formatStateUsing(fn ($s) => match ($s) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         Video::STATUS_DRAFT     => '草稿',
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
@@ -169,7 +170,7 @@ class VideoResource extends Resource
                 Tables\Columns\TextColumn::make('views')
                     ->label('播放')
                     ->sortable()
-                    ->formatStateUsing(fn ($s) => number_format($s)),
+                    ->formatStateUsing(fn ($state) => number_format($state)),
                 Tables\Columns\TextColumn::make('likes')
                     ->label('点赞')
                     ->sortable(),
@@ -196,9 +197,11 @@ class VideoResource extends Resource
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     ]),
-                Tables\Filters\SelectFilter::make('category_id')
+                Tables\Filters\SelectFilter::make('category')
                     ->label('分类')
-                    ->relationship('category', 'name'),
+                    ->relationship('category', 'name')
+                    ->preload()
+                    ->searchable(),
             ])
             ->actions([
                 Tables\Actions\Action::make('preview')

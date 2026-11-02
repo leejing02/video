@@ -12,9 +12,8 @@ class CreateLongVideoCategory extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // 默认创建在长视频分类范围
-        if (empty($data['kind'])) {
-            $data['kind'] = Category::KIND_LONG;
+        if (empty($data['type'])) {
+            $data['type'] = Category::TYPE_VIDEO;
         }
         return $data;
     }

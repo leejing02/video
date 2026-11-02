@@ -2,65 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Str;
-
-class Category extends Model
+/**
+ * Thin alias so that Filament resources using App\Models\Category
+ * still work — the real model lives in App\Domains\Video\Models\Category.
+ */
+class Category extends \App\Domains\Video\Models\Category
 {
-    use HasFactory;
-
-    public const KIND_LONG  = 'long';
-    public const KIND_SHORT = 'short';
-    public const KIND_BOTH  = 'both';
-
-    protected $fillable = [
-        'name',
-        'slug',
-        'kind',
-        'icon',
-        'cover',
-        'sort',
-        'is_active',
-    ];
-
-    protected $casts = [
-        'is_active' => 'boolean',
-        'sort'      => 'integer',
-    ];
-
-    protected static function booted(): void
-    {
-        static::saving(function (Category $category) {
-            if (empty($category->slug)) {
-                $category->slug = Str::slug($category->name);
-            }
-        });
-    }
-
-    public function videos(): HasMany
-    {
-        return $this->hasMany(Video::class);
-    }
-
-    public function longVideos(): HasMany
-    {
-        return $this->hasMany(Video::class)->where('type', Video::TYPE_LONG);
-    }
-
-    public function shortVideos(): HasMany
-    {
-        return $this->hasMany(Video::class)->where('type', Video::TYPE_SHORT);
-    }
-
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    public function scopeForKind($query, string $kind)
-    {
-        return $query->whereIn('kind', [$kind, self::KIND_BOTH]);
-    }
+    // Keep legacy KIND_ constants pointing to the correct TYPE_ values.
+    public const KIND_LONG  = self::TYPE_VIDEO;
+    public const KIND_SHORT = self::TYPE_SHORT;
 }

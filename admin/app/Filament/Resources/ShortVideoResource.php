@@ -42,9 +42,9 @@ class ShortVideoResource extends VideoResource
                     ->relationship(
                         name: 'category',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $q) => $q
+                        modifyQueryUsing: fn (Builder $query) => $query
                             ->where('is_active', true)
-                            ->whereIn('kind', [Category::KIND_SHORT, Category::KIND_BOTH])
+                            ->where('type', Category::TYPE_SHORT)
                     )
                     ->searchable()->preload()->required(),
                 Forms\Components\Select::make('user_id')
@@ -104,14 +104,14 @@ class ShortVideoResource extends VideoResource
                         'success' => Video::STATUS_PUBLISHED,
                         'danger'  => Video::STATUS_ARCHIVED,
                     ])
-                    ->formatStateUsing(fn ($s) => match ($s) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         Video::STATUS_DRAFT     => '草稿',
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     }),
                 Tables\Columns\TextColumn::make('duration')
                     ->label('时长')
-                    ->formatStateUsing(fn ($s) => $s . 's'),
+                    ->formatStateUsing(fn ($state) => $state . 's'),
                 Tables\Columns\TextColumn::make('views')->label('播放')->sortable(),
                 Tables\Columns\TextColumn::make('likes')->label('赞')->sortable(),
                 Tables\Columns\TextColumn::make('comments_count')->label('评论')->sortable(),
@@ -125,9 +125,11 @@ class ShortVideoResource extends VideoResource
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     ]),
-                Tables\Filters\SelectFilter::make('category_id')
+                Tables\Filters\SelectFilter::make('category')
                     ->label('分类')
-                    ->relationship('category', 'name', fn (Builder $q) => $q->whereIn('kind', [Category::KIND_SHORT, Category::KIND_BOTH])),
+                    ->relationship('category', 'name', fn (Builder $query) => $query->where('type', Category::TYPE_SHORT))
+                    ->preload()
+                    ->searchable(),
             ])
             ->actions([
                 Tables\Actions\Action::make('preview')

@@ -44,9 +44,9 @@ class LongVideoResource extends VideoResource
                     ->relationship(
                         name: 'category',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $q) => $q
+                        modifyQueryUsing: fn (Builder $query) => $query
                             ->where('is_active', true)
-                            ->whereIn('kind', [Category::KIND_LONG, Category::KIND_BOTH])
+                            ->where('type', Category::TYPE_VIDEO)
                     )
                     ->searchable()->preload()->required(),
                 Forms\Components\Select::make('user_id')
@@ -101,14 +101,14 @@ class LongVideoResource extends VideoResource
                         'success' => Video::STATUS_PUBLISHED,
                         'danger'  => Video::STATUS_ARCHIVED,
                     ])
-                    ->formatStateUsing(fn ($s) => match ($s) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         Video::STATUS_DRAFT     => '草稿',
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     }),
                 Tables\Columns\TextColumn::make('duration')
                     ->label('时长')
-                    ->formatStateUsing(fn ($s) => sprintf('%02d:%02d', intdiv((int)$s, 60), (int)$s % 60)),
+                    ->formatStateUsing(fn ($state) => sprintf('%02d:%02d', intdiv((int)$state, 60), (int)$state % 60)),
                 Tables\Columns\TextColumn::make('views')->label('播放')->sortable(),
                 Tables\Columns\TextColumn::make('likes')->label('赞')->sortable(),
                 Tables\Columns\TextColumn::make('comments_count')->label('评论')->sortable(),
@@ -122,9 +122,11 @@ class LongVideoResource extends VideoResource
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     ]),
-                Tables\Filters\SelectFilter::make('category_id')
+                Tables\Filters\SelectFilter::make('category')
                     ->label('分类')
-                    ->relationship('category', 'name', fn (Builder $q) => $q->whereIn('kind', [Category::KIND_LONG, Category::KIND_BOTH])),
+                    ->relationship('category', 'name', fn (Builder $query) => $query->where('type', Category::TYPE_VIDEO))
+                    ->preload()
+                    ->searchable(),
             ])
             ->actions([
                 Tables\Actions\Action::make('preview')

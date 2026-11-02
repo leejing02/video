@@ -78,8 +78,8 @@ func (r *CommentRepo) ListRoots(videoID int64, limit, offset int) ([]models.Comm
 	}
 	repliesByParent := map[int64][]models.CommentWithUser{}
 	for _, r := range replies {
-		if r.ParentID.Valid {
-			repliesByParent[r.ParentID.Int64] = append(repliesByParent[r.ParentID.Int64], build(r))
+		if r.ParentID != nil {
+			repliesByParent[*r.ParentID] = append(repliesByParent[*r.ParentID], build(r))
 		}
 	}
 	out := make([]models.CommentWithUser, 0, len(roots))

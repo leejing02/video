@@ -43,7 +43,7 @@ func (h *ShortVideoHandler) Show(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if v == nil {
+	if v == nil || v.Status != "published" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -97,7 +97,7 @@ func (h *ShortVideoHandler) Favorite(c *gin.Context) {
 func (h *ShortVideoHandler) Share(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	v, err := h.Repo.FindByID(id)
-	if err != nil || v == nil {
+	if err != nil || v == nil || v.Status != "published" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -134,13 +134,10 @@ func (h *ShortVideoHandler) CreateComment(c *gin.Context) {
 		return
 	}
 	comment := &models.ShortVideoComment{
-		UserID:  uid,
-		VideoID: vid,
-		Content: body.Content,
-	}
-	if body.ParentID != nil {
-		comment.ParentID.Valid = true
-		comment.ParentID.Int64 = *body.ParentID
+		UserID:   uid,
+		VideoID:  vid,
+		Content:  body.Content,
+		ParentID: body.ParentID,
 	}
 	if err := h.Repo.CreateComment(comment); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

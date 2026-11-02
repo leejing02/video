@@ -33,3 +33,33 @@ ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 *.bak.*
 
 
+
+# Server runtime and private files
+.env
+.env.*
+**/.env
+**/.env.*
+.mcp.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.bak
+*.bak.*
+*.before-*
+*.zip
+*.tar.gz
+/*.sql
+.DS_Store
+**/__MACOSX/
+vendor/
+**/vendor/
+**/node_modules/
+web/dist/
+admin/bootstrap/cache/*
+admin/storage/
+api/video-api
+api/gameserver
+/admin/public/css/filament/
+/admin/public/js/filament/

@@ -2,12 +2,12 @@
 
 namespace App\Policies;
 
-use App\Models\User;
+use App\Domains\User\Models\AdminUser;
 use App\Models\Video;
 
 class VideoPolicy
 {
-    public function before(User $user): ?bool
+    public function before(AdminUser $user): ?bool
     {
         return $user->isSuperAdmin() ? true : null;
     }
@@ -19,28 +19,28 @@ class VideoPolicy
         return "{$resource}.{$action}";
     }
 
-    public function viewAny(User $user): bool
+    public function viewAny(AdminUser $user): bool
     {
         // 列表页能进只要有 long_video.view 或 short_video.view 之一
         return $user->canAny(['long_video.view', 'short_video.view']);
     }
 
-    public function view(User $user, Video $r): bool
+    public function view(AdminUser $user, Video $r): bool
     {
         return $user->can($this->permFor($r, 'view'));
     }
 
-    public function create(User $user): bool
+    public function create(AdminUser $user): bool
     {
         return $user->canAny(['long_video.create', 'short_video.create']);
     }
 
-    public function update(User $user, Video $r): bool
+    public function update(AdminUser $user, Video $r): bool
     {
         return $user->can($this->permFor($r, 'update'));
     }
 
-    public function delete(User $user, Video $r): bool
+    public function delete(AdminUser $user, Video $r): bool
     {
         return $user->can($this->permFor($r, 'delete'));
     }

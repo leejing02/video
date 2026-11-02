@@ -95,26 +95,18 @@ class Category extends Model
 
     /* -------------------- Domain relations -------------------- */
 
-    /** 该 type='video' 分类下的长视频 */
-    // public function videos(): HasMany
-    // {
-    //     return $this->hasMany(Video::class)
-    //         ->where('type', Video::TYPE_LONG);
-    // }
-
-    // /** 该 type='short' 分类下的短视频（同样在 videos 表，靠 type 区分） */
-    // public function shortVideos(): HasMany
-    // {
-    //     return $this->hasMany(Video::class)
-    //         ->where('type', Video::TYPE_SHORT);
-    // }
     public function videos(): HasMany
     {
         return $this->hasMany(Video::class, 'category_id')
             ->where('type', Video::TYPE_LONG);
     }
 
-    /** 该 type='short' 分类下的短视频（同样在 videos 表，靠 type 区分） */
+    public function longVideos(): HasMany
+    {
+        return $this->hasMany(Video::class, 'category_id')
+            ->where('type', Video::TYPE_LONG);
+    }
+
     public function shortVideos(): HasMany
     {
         return $this->hasMany(Video::class, 'category_id')

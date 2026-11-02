@@ -37,14 +37,15 @@ class CategoryResource extends Resource
                     ->label('Slug')
                     ->unique(ignoreRecord: true)
                     ->required(),
-                Forms\Components\Select::make('kind')
+                Forms\Components\Select::make('type')
                     ->label('类型')
                     ->options([
-                        Category::KIND_LONG  => '长视频',
-                        Category::KIND_SHORT => '短视频',
-                        Category::KIND_BOTH  => '通用',
+                        Category::TYPE_VIDEO => '长视频',
+                        Category::TYPE_SHORT => '短视频',
+                        Category::TYPE_LIVE  => '直播',
+                        Category::TYPE_CHAT  => '聊天',
                     ])
-                    ->default(Category::KIND_BOTH)
+                    ->default(Category::TYPE_VIDEO)
                     ->required(),
                 Forms\Components\TextInput::make('sort')
                     ->label('排序')
@@ -76,18 +77,15 @@ class CategoryResource extends Resource
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('slug')->label('Slug')->copyable(),
-                Tables\Columns\BadgeColumn::make('kind')
+                Tables\Columns\BadgeColumn::make('type')
                     ->label('类型')
                     ->colors([
-                        'primary' => Category::KIND_LONG,
-                        'success' => Category::KIND_SHORT,
-                        'gray'    => Category::KIND_BOTH,
+                        'primary' => Category::TYPE_VIDEO,
+                        'success' => Category::TYPE_SHORT,
+                        'warning' => Category::TYPE_LIVE,
+                        'gray'    => Category::TYPE_CHAT,
                     ])
-                    ->formatStateUsing(fn ($s) => match ($s) {
-                        Category::KIND_LONG  => '长视频',
-                        Category::KIND_SHORT => '短视频',
-                        default              => '通用',
-                    }),
+                    ->formatStateUsing(fn ($state) => Category::TYPES[$state] ?? $state),
                 Tables\Columns\TextColumn::make('videos_count')
                     ->counts('videos')
                     ->label('视频数')
@@ -96,13 +94,9 @@ class CategoryResource extends Resource
                 Tables\Columns\IconColumn::make('is_active')->boolean()->label('启用'),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('kind')
+                Tables\Filters\SelectFilter::make('type')
                     ->label('类型')
-                    ->options([
-                        Category::KIND_LONG  => '长视频',
-                        Category::KIND_SHORT => '短视频',
-                        Category::KIND_BOTH  => '通用',
-                    ]),
+                    ->options(Category::TYPES),
                 Tables\Filters\TernaryFilter::make('is_active')->label('启用'),
             ])
             ->reorderable('sort')
