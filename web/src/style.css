@@ -40,12 +40,12 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .conversation-row:last-child:after { display: none; }
 .conversation-row:hover { background: #f5f8fc; }
 .conversation-row.selected { background: #e8f3ff; }
-.room-avatar,.header-avatar { position: relative; display: grid; place-items: center; border-radius: 50%; width: 60px; height: 60px; flex-shrink: 0; background: linear-gradient(155deg,#51cdf4,#0088ef); color: #fff; font-size: 27px; font-weight: 600; }
+.room-avatar,.header-avatar { position: relative; overflow: hidden; display: grid; place-items: center; border-radius: 50%; width: 60px; height: 60px; flex-shrink: 0; background: linear-gradient(155deg,#51cdf4,#0088ef); color: #fff; font-size: 27px; font-weight: 600; }
 .room-avatar { width: 52px; height: 52px; font-size: 24px; }
 .conversation-row:nth-child(3n+2) .room-avatar { background: linear-gradient(155deg,#59ddcc,#00aaa5); }
 .conversation-row:nth-child(3n) .room-avatar { background: linear-gradient(155deg,#b2a6fa,#8471df); }
 .room-avatar.direct { background: linear-gradient(155deg,#ffba78,#f38b57); }
-.room-avatar img,.header-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.room-avatar img,.header-avatar img,.sender-avatar img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .room-avatar i { display: none; }
 .conversation-copy { flex: 1; min-width: 0; }
 .conversation-title,.conversation-preview { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -67,8 +67,7 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .chat-loading,.empty-messages { color: #778a94; text-align: center; padding: 30px; font-size: 13px; }
 .message-row { display: flex; align-items: flex-end; gap: 9px; margin: 10px 0; }
 .message-row.mine { justify-content: flex-end; }
-.sender-avatar { width: 31px; height: 31px; flex-shrink: 0; border-radius: 50%; background: #5ba8d2; color: white; display: grid; place-items: center; font-size: 13px; overflow: hidden; }
-.sender-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sender-avatar { position: relative; width: 31px; height: 31px; flex-shrink: 0; border-radius: 50%; background: #5ba8d2; color: white; display: grid; place-items: center; font-size: 13px; overflow: hidden; }
 .message-bubble { max-width: 78%; min-width: 72px; background: #fff; border-radius: 15px 15px 15px 4px; padding: 9px 12px 6px; box-shadow: 0 1px 2px #3a506314; }
 .mine .message-bubble { background: #dff5cf; border-radius: 15px 15px 4px 15px; }
 .sender-name { display: block; font-size: 12px; font-weight: 600; color: #0088d0; margin-bottom: 4px; }
