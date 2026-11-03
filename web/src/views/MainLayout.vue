@@ -11,7 +11,7 @@ const tabs = [
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'chat-mode': route.name === 'chat' }">
     <main class="app-content"><RouterView /></main>
     <nav class="bottom-nav" aria-label="主导航"><button v-for="tab in tabs" :key="tab.name" :class="['tab-btn', { active: route.name === tab.name || (tab.name === 'long' && route.name === 'video-detail') }]" :aria-current="route.name === tab.name ? 'page' : undefined" @click="router.replace({ name: tab.name })"><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="tab.path" /></svg><span>{{ tab.label }}</span><i></i></button></nav>
   </div>

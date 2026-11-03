@@ -21,6 +21,7 @@ const olderLoading = ref(false)
 const error = ref('')
 const pending = ref<Record<number, boolean>>({})
 const scrollEl = ref<HTMLElement | null>(null)
+const searchInput = ref<HTMLInputElement | null>(null)
 const socket = new WsClient()
 const cleanups: (() => void)[] = []
 let refreshTimer: ReturnType<typeof setInterval>
@@ -151,9 +152,13 @@ onUnmounted(() => { disposed = true; selectionVersion++; cleanups.forEach(fn => 
 <template>
   <div class="messenger" :class="{ 'conversation-open': mobileOpen }">
     <aside class="conversation-list">
-      <header class="chat-list-header"><div><span class="eyebrow">保持联系，分享此刻</span><h1>消息 <span v-if="totalUnread" class="unread-total">{{ totalUnread }}</span></h1></div><button class="round-button" aria-label="刷新会话" @click="recover">↻</button></header>
-      <div class="chat-search"><span>⌕</span><input v-model="query" placeholder="搜索会话" aria-label="搜索会话" /></div>
-      <div class="conversation-filters"><button v-for="option in [{id:'all',name:'全部消息'},{id:'group',name:'群组'},{id:'direct',name:'私聊'}]" :key="option.id" :class="{ selected: filter === option.id }" @click="filter = option.id">{{ option.name }}</button></div>
+      <header class="chat-list-header">
+        <button class="header-action" @click="searchInput?.focus()">搜索</button>
+        <div class="chat-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6 18-4-7-8-3Zm8 3L21 3" /></svg><h1>聊天</h1><span v-if="totalUnread" class="unread-total">{{ totalUnread > 99 ? '99+' : totalUnread }}</span></div>
+        <button class="round-button" aria-label="刷新会话" @click="recover">↻</button>
+      </header>
+      <div class="chat-search"><span>⌕</span><input ref="searchInput" v-model="query" placeholder="搜索会话" aria-label="搜索会话" /></div>
+      <div class="conversation-filters"><button v-for="option in [{id:'all',name:'所有聊天'},{id:'group',name:'群组'},{id:'direct',name:'私聊'}]" :key="option.id" :class="{ selected: filter === option.id }" @click="filter = option.id">{{ option.name }}</button></div>
       <div v-if="error && !mobileOpen" class="chat-error" role="alert">{{ error }} <button @click="recover">刷新</button></div>
       <div class="conversation-items">
         <button v-for="item in filtered" :key="item.id" class="conversation-row" :class="{ selected: selected === item.id }" @click="selectRoom(item)">
