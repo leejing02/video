@@ -38,8 +38,7 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .conversation-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-height: 72px; width: 100%; text-align: left; }
 .conversation-row:after { content: ''; position: absolute; left: 78px; right: 0; bottom: 0; height: 1px; background: #e4e4e8; }
 .conversation-row:last-child:after { display: none; }
-.conversation-row:hover { background: #f5f8fc; }
-.conversation-row.selected { background: #e8f3ff; }
+.conversation-row,.conversation-row:hover,.conversation-row:active { background: #fff; }
 .room-avatar,.header-avatar { position: relative; overflow: hidden; display: grid; place-items: center; border-radius: 50%; width: 60px; height: 60px; flex-shrink: 0; background: linear-gradient(155deg,#51cdf4,#0088ef); color: #fff; font-size: 27px; font-weight: 600; }
 .room-avatar { width: 52px; height: 52px; font-size: 24px; }
 .conversation-row:nth-child(3n+2) .room-avatar { background: linear-gradient(155deg,#59ddcc,#00aaa5); }

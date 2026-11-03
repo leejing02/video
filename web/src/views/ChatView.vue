@@ -163,7 +163,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
       <div class="conversation-filters"><button v-for="option in [{id:'all',name:'所有聊天'},{id:'group',name:'群组'},{id:'direct',name:'私聊'}]" :key="option.id" :class="{ selected: filter === option.id }" @click="filter = option.id">{{ option.name }}</button></div>
       <div v-if="error && !mobileOpen" class="chat-error" role="alert">{{ error }} <button @click="recover">刷新</button></div>
       <div class="conversation-items">
-        <button v-for="item in filtered" :key="item.id" class="conversation-row" :class="{ selected: selected === item.id }" @click="selectRoom(item)">
+        <button v-for="item in filtered" :key="item.id" class="conversation-row" @click="selectRoom(item)">
           <div class="room-avatar" :class="{ direct: item.kind === 'direct' }"><AvatarContent :src="item.cover" :name="item.name" /><i v-if="item.kind !== 'direct'">#</i></div>
           <div class="conversation-copy"><div class="conversation-title"><strong>{{ item.name }}</strong><time>{{ time(item.last_message_at) }}</time></div><div class="conversation-preview"><span>{{ item.last_message || (item.kind === 'direct' ? '开始你们的对话' : '点击进入群聊') }}</span><b v-if="item.unread_count">{{ item.unread_count > 99 ? '99+' : item.unread_count }}</b></div></div>
         </button>
