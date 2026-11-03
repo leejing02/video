@@ -12,6 +12,7 @@ const rooms = ref<ChatRoom[]>([])
 const selected = ref<number | null>(null)
 const cache = ref<Record<number, Message[]>>({})
 const exhausted = ref<Record<number, boolean>>({})
+const query = ref('')
 const filter = ref('all')
 const mobileOpen = ref(false)
 const chatDetailOpen = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
@@ -29,7 +30,7 @@ let selectionVersion = 0
 let disposed = false
 const room = computed(() => rooms.value.find(item => item.id === selected.value))
 const messages = computed(() => selected.value === null ? [] : cache.value[selected.value] ?? [])
-const filtered = computed(() => rooms.value.filter(item => (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
+const filtered = computed(() => rooms.value.filter(item => item.name.toLowerCase().includes(query.value.toLowerCase()) && (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
 const totalUnread = computed(() => rooms.value.reduce((sum, item) => sum + item.unread_count, 0))
 
 function merge(id: number, incoming: Message[]) {
@@ -157,6 +158,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
         <div class="chat-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6 18-4-7-8-3Zm8 3L21 3" /></svg><h1>聊天</h1><span v-if="totalUnread" class="unread-total">{{ totalUnread > 99 ? '99+' : totalUnread }}</span></div>
         <button class="round-button" aria-label="刷新会话" @click="recover">↻</button>
       </header>
+      <div class="chat-search"><span aria-hidden="true">⌕</span><input v-model="query" placeholder="搜索会话" aria-label="搜索会话" type="search" /></div>
       <div class="conversation-filters"><button v-for="option in [{id:'all',name:'所有聊天'},{id:'group',name:'群组'},{id:'direct',name:'私聊'}]" :key="option.id" :class="{ selected: filter === option.id }" @click="filter = option.id">{{ option.name }}</button></div>
       <div v-if="error && !mobileOpen" class="chat-error" role="alert">{{ error }} <button @click="recover">刷新</button></div>
       <div class="conversation-items">
