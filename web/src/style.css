@@ -16,7 +16,7 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .app-shell{height:100%;height:var(--app-height,100dvh);display:flex;flex-direction:column;overflow:hidden;}
 .app-content{flex:1;min-height:0;overflow:hidden;}
 .bottom-nav { display: flex; flex-shrink: 0; align-items: center; background: #fff; border-top: 1px solid #ededed; padding: 0 8px; }
-.tab-btn { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 36px; color: #777; font-size: 14px; font-weight: 600; }
+.tab-btn { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 36px; color: #777; font-size: 18px; font-weight: 600; }
 .tab-btn.active { color: #171717; font-weight: 750; }
 .tab-publish { color: #171717; }
 .publish-icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
