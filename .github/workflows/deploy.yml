@@ -1,8 +1,6 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:        # 也允许手动触发
 
 concurrency:
@@ -31,22 +29,28 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}    # 服务器上仓库根目录，如 /www/wwwroot/video
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
-            "${SSH_USER}@${SSH_HOST}" \
-            "set -e; cd '${DEPLOY_PATH}'; \
-             git fetch --all; \
-             git reset --hard origin/main; \
-             ./deploy.sh update"
+          ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
+            "${SSH_USER}@${SSH_HOST}" "bash -s -- $(printf '%q' "$DEPLOY_PATH")" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          test "$(git branch --show-current)" = main
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git fetch origin main
+          git merge --ff-only origin/main
+          docker compose --project-directory . --env-file .env.prod \
+            -f deploy/docker-compose.prod.yml -f deploy/docker-compose.source.yml \
+            up -d --build --no-deps api web
+          REMOTE
 
       - name: 健康检查
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
+          ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
             "${SSH_USER}@${SSH_HOST}" \
             "docker compose --env-file /www/wwwroot/video/.env.prod \
-               -f /www/wwwroot/video/docker-compose.prod.yml ps"
+               -f /www/wwwroot/video/deploy/docker-compose.prod.yml -f /www/wwwroot/video/deploy/docker-compose.source.yml ps"
 
       - name: 通知（可选 — Slack / 飞书 / 钉钉 webhook）
         if: always()

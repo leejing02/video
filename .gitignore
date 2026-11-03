@@ -63,3 +63,9 @@ api/video-api
 api/gameserver
 /admin/public/css/filament/
 /admin/public/js/filament/
+
+# Local isolated worktrees
+.worktrees/
+
+# Ignore dependency directories and local dependency symlinks
+**/node_modules

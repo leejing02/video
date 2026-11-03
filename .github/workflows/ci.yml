@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'codex/**']
   pull_request:
     branches: [main]
 
@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: api/go.mod
           cache: true
           cache-dependency-path: api/go.sum
 
@@ -46,9 +46,8 @@ jobs:
       - name: go build
         run: go build -v ./...
 
-      # 想加测试就放开
-      # - name: go test
-      #   run: go test -race -v ./...
+      - name: go test
+        run: go test ./... -count=1 -timeout=60s
 
   php-admin:
     name: PHP Admin
@@ -116,3 +115,21 @@ jobs:
           OSS_AK: x
           OSS_SK: x
         run: docker compose -f docker-compose.prod.yml config --quiet
+
+  web:
+    name: Web checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx vue-tsc --noEmit -p tsconfig.app.json
+      - run: npm run test:chat
+      - run: npm run build
