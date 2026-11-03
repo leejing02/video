@@ -44,9 +44,9 @@ function switchMode(m: 'login' | 'register') {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto flex flex-col safe-top safe-bottom px-6 pt-16 bg-black text-white">
+  <div class="h-full overflow-y-auto flex flex-col safe-top safe-bottom px-6 pt-16 bg-white text-neutral-900">
     <h1 class="text-3xl font-bold mb-1">{{ mode === 'login' ? '登录' : '注册' }}</h1>
-    <p class="text-gray-400 text-sm mb-6">
+    <p class="text-gray-600 text-sm mb-6">
       {{ mode === 'login' ? '还没账号？' : '已有账号？' }}
       <button
         class="text-primary underline"
@@ -61,7 +61,7 @@ function switchMode(m: 'login' | 'register') {
           type="text"
           placeholder="昵称"
           required
-          class="px-4 py-3 rounded-xl bg-gray-900 border border-gray-800 outline-none focus:border-primary"
+          class="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:border-primary"
         />
         <input
           v-model="username"
@@ -69,7 +69,7 @@ function switchMode(m: 'login' | 'register') {
           placeholder="用户名（字母/数字/下划线）"
           required
           pattern="[a-zA-Z0-9_]+"
-          class="px-4 py-3 rounded-xl bg-gray-900 border border-gray-800 outline-none focus:border-primary"
+          class="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:border-primary"
         />
       </template>
 
@@ -78,7 +78,7 @@ function switchMode(m: 'login' | 'register') {
         type="email"
         placeholder="邮箱"
         required
-        class="px-4 py-3 rounded-xl bg-gray-900 border border-gray-800 outline-none focus:border-primary"
+        class="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:border-primary"
       />
       <input
         v-model="password"
@@ -86,7 +86,7 @@ function switchMode(m: 'login' | 'register') {
         :placeholder="mode === 'register' ? '密码（至少 6 位）' : '密码'"
         required
         :minlength="mode === 'register' ? 6 : undefined"
-        class="px-4 py-3 rounded-xl bg-gray-900 border border-gray-800 outline-none focus:border-primary"
+        class="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 outline-none focus:border-primary"
       />
 
       <p v-if="error" class="text-red-400 text-sm">{{ error }}</p>

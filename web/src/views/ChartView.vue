@@ -13,7 +13,7 @@ const WU_XING_COLOR: Record<string, string> = {
   木: 'bg-green-500', 火: 'bg-red-500', 土: 'bg-yellow-600', 金: 'bg-gray-300', 水: 'bg-blue-500',
 }
 const WU_XING_TEXT: Record<string, string> = {
-  木: 'text-green-400', 火: 'text-red-400', 土: 'text-yellow-400', 金: 'text-gray-300', 水: 'text-blue-400',
+  木: 'text-green-700', 火: 'text-red-700', 土: 'text-yellow-700', 金: 'text-gray-700', 水: 'text-blue-700',
 }
 
 const loading = ref(true)
@@ -84,10 +84,10 @@ const analysisCards = computed(() => {
   if (!chart.value?.analysis) return []
   const a = chart.value.analysis
   return [
-    { title: '命局总评', icon: '🌟', color: 'text-yellow-400', text: a.overall },
+    { title: '命局总评', icon: '🌟', color: 'text-yellow-700', text: a.overall },
     { title: '五行喜忌', icon: '☯️', color: 'text-indigo-400', text: a.wuxing_advice },
-    { title: '大运解析', icon: '🌊', color: 'text-blue-400', text: a.dayun_now },
-    { title: '事业财运', icon: '💼', color: 'text-green-400', text: a.career },
+    { title: '大运解析', icon: '🌊', color: 'text-blue-700', text: a.dayun_now },
+    { title: '事业财运', icon: '💼', color: 'text-green-700', text: a.career },
     { title: '感情婚姻', icon: '❤️', color: 'text-pink-400', text: a.love },
     { title: '人生建议', icon: '🧭', color: 'text-orange-400', text: a.advice },
   ]
@@ -109,7 +109,7 @@ async function saveImage() {
   saving.value = true
   try {
     const dataUrl = await toPng(chartRef.value, {
-      backgroundColor: '#0d0d14',
+      backgroundColor: '#ffffff',
       pixelRatio: 2,
     })
     const link = document.createElement('a')
@@ -129,18 +129,18 @@ function goCalculate() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-black text-white">
+  <div class="min-h-screen bg-white text-gray-900">
 
     <!-- Loading -->
     <div v-if="loading" class="flex flex-col items-center justify-center h-screen gap-4">
       <div class="w-16 h-16 rounded-full border-4 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-      <p class="text-gray-400 text-sm">加载命盘中…</p>
+      <p class="text-gray-600 text-sm">加载命盘中…</p>
     </div>
 
     <!-- Error -->
     <div v-else-if="error" class="flex flex-col items-center justify-center h-screen gap-4 px-6 text-center">
       <div class="text-5xl">🔯</div>
-      <p class="text-gray-300">{{ error }}</p>
+      <p class="text-gray-700">{{ error }}</p>
       <button class="mt-4 px-6 py-3 rounded-xl bg-indigo-600 text-white text-sm" @click="goCalculate">
         去算一个
       </button>
@@ -155,17 +155,17 @@ function goCalculate() {
       <!-- Header -->
       <div class="text-center py-4">
         <div class="text-4xl mb-2">🔯</div>
-        <h1 class="text-xl font-bold text-white">八字命盘</h1>
-        <p class="text-sm text-gray-400 mt-1">{{ birthDisplay }} · {{ genderDisplay }}</p>
+        <h1 class="text-xl font-bold text-gray-900">八字命盘</h1>
+        <p class="text-sm text-gray-600 mt-1">{{ birthDisplay }} · {{ genderDisplay }}</p>
       </div>
 
       <!-- 四柱 -->
-      <div class="bg-gray-900 rounded-2xl p-4">
-        <div class="text-xs text-gray-400 font-medium mb-3 text-center tracking-widest">四 柱 八 字</div>
+      <div class="bg-gray-50 rounded-2xl p-4">
+        <div class="text-xs text-gray-600 font-medium mb-3 text-center tracking-widest">四 柱 八 字</div>
         <div class="grid grid-cols-4 gap-2 text-center">
           <div v-for="(label, key) in { year: '年柱', month: '月柱', day: '日柱', hour: '时柱' }" :key="key">
             <div class="text-xs text-gray-500 mb-1">{{ label }}</div>
-            <div class="bg-black/50 rounded-xl py-3">
+            <div class="bg-gray-100 rounded-xl py-3">
               <div class="text-2xl font-bold text-yellow-300">{{ (chart.pillars as any)[key][0] }}</div>
               <div class="text-2xl font-bold text-yellow-100">{{ (chart.pillars as any)[key][1] }}</div>
             </div>
@@ -179,31 +179,31 @@ function goCalculate() {
       </div>
 
       <!-- 五行 -->
-      <div class="bg-gray-900 rounded-2xl p-4">
-        <div class="text-xs text-gray-400 font-medium mb-3">五行分布</div>
+      <div class="bg-gray-50 rounded-2xl p-4">
+        <div class="text-xs text-gray-600 font-medium mb-3">五行分布</div>
         <div class="space-y-2">
           <div v-for="wx in WU_XING_ORDER" :key="wx" class="flex items-center gap-2">
             <span class="w-4 text-sm" :class="WU_XING_TEXT[wx]">{{ wx }}</span>
-            <div class="flex-1 bg-gray-800 rounded-full h-2.5 overflow-hidden">
+            <div class="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
               <div
                 class="h-full rounded-full"
                 :class="WU_XING_COLOR[wx]"
                 :style="{ width: `${((chart.wuxing[wx] || 0) / maxWuXing) * 100}%` }"
               />
             </div>
-            <span class="text-xs text-gray-400 w-4 text-right">{{ chart.wuxing[wx] || 0 }}</span>
+            <span class="text-xs text-gray-600 w-4 text-right">{{ chart.wuxing[wx] || 0 }}</span>
           </div>
         </div>
       </div>
 
       <!-- 大运 -->
-      <div class="bg-gray-900 rounded-2xl p-4">
-        <div class="text-xs text-gray-400 font-medium mb-3">大运走势</div>
+      <div class="bg-gray-50 rounded-2xl p-4">
+        <div class="text-xs text-gray-600 font-medium mb-3">大运走势</div>
         <div class="flex gap-2 overflow-x-auto pb-1">
           <div
             v-for="d in chart.dayun"
             :key="d.age"
-            class="flex-none flex flex-col items-center gap-1 px-3 py-2 rounded-xl min-w-[56px] bg-black/40"
+            class="flex-none flex flex-col items-center gap-1 px-3 py-2 rounded-xl min-w-[56px] bg-gray-100"
           >
             <span class="text-xs text-gray-500">{{ d.age }}岁</span>
             <span class="text-base font-bold text-yellow-200">{{ d.ganzhi[0] }}</span>
@@ -214,17 +214,17 @@ function goCalculate() {
 
       <!-- AI Analysis -->
       <div v-if="chart.analysis" class="space-y-3">
-        <div class="text-xs text-gray-400 font-medium px-1">AI 命理解读</div>
+        <div class="text-xs text-gray-600 font-medium px-1">AI 命理解读</div>
         <div
           v-for="card in analysisCards"
           :key="card.title"
-          class="bg-gray-900 rounded-2xl p-4"
+          class="bg-gray-50 rounded-2xl p-4"
         >
           <h3 class="text-sm font-semibold mb-2 flex items-center gap-1.5">
             <span>{{ card.icon }}</span>
             <span :class="card.color">{{ card.title }}</span>
           </h3>
-          <p class="text-sm text-gray-300 leading-relaxed">{{ card.text }}</p>
+          <p class="text-sm text-gray-700 leading-relaxed">{{ card.text }}</p>
         </div>
       </div>
 
@@ -238,13 +238,13 @@ function goCalculate() {
             @click="share"
           >{{ copied ? '✅ 已复制' : '🔗 分享链接' }}</button>
           <button
-            class="py-3.5 rounded-2xl bg-gray-700 text-gray-200 font-semibold flex items-center justify-center gap-1.5 active:opacity-80 text-sm"
+            class="py-3.5 rounded-2xl bg-gray-700 text-gray-800 font-semibold flex items-center justify-center gap-1.5 active:opacity-80 text-sm"
             :disabled="saving"
             @click="saveImage"
           >{{ saving ? '生成中…' : '📷 保存截图' }}</button>
         </div>
         <button
-          class="w-full py-3.5 rounded-2xl bg-gray-800 text-gray-300 font-medium active:opacity-80"
+          class="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-700 font-medium active:opacity-80"
           @click="goCalculate"
         >
           🔯 我也要算命

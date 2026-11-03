@@ -40,7 +40,7 @@ onMounted(load)
 
 <template>
   <div v-if="video" class="flex flex-col h-full">
-    <header class="flex-none px-3 py-3 border-b border-gray-800 safe-top flex items-center gap-3">
+    <header class="flex-none px-3 py-3 border-b border-gray-200 safe-top flex items-center gap-3">
       <button class="text-2xl" @click="router.back()">‹</button>
       <h1 class="text-base font-semibold flex-1 truncate">{{ video.title }}</h1>
     </header>
@@ -49,20 +49,20 @@ onMounted(load)
     <div class="flex-1 overflow-y-auto">
       <video :src="video.url" controls autoplay class="w-full bg-black aspect-video" />
 
-      <div class="px-4 py-3 border-b border-gray-800">
+      <div class="px-4 py-3 border-b border-gray-200">
         <h2 class="font-semibold">{{ video.title }}</h2>
-        <p class="text-sm text-gray-400 mt-1">{{ video.user?.name }} · {{ video.views }} 次观看</p>
+        <p class="text-sm text-gray-600 mt-1">{{ video.user?.name }} · {{ video.views }} 次观看</p>
         <div class="flex gap-3 mt-3">
-          <button class="px-4 py-1.5 rounded-full bg-gray-800 text-sm" @click="like">❤ {{ video.likes }}</button>
-          <span class="px-4 py-1.5 rounded-full bg-gray-800 text-sm">💬 {{ video.comments_count }}</span>
+          <button class="px-4 py-1.5 rounded-full bg-gray-100 text-sm" @click="like">❤ {{ video.likes }}</button>
+          <span class="px-4 py-1.5 rounded-full bg-gray-100 text-sm">💬 {{ video.comments_count }}</span>
         </div>
-        <p v-if="video.description" class="text-sm text-gray-300 mt-3 whitespace-pre-line">{{ video.description }}</p>
+        <p v-if="video.description" class="text-sm text-gray-600 mt-3 whitespace-pre-line">{{ video.description }}</p>
       </div>
 
       <div class="px-4 py-3">
-        <h3 class="text-sm text-gray-400 mb-2">评论 ({{ comments.length }})</h3>
+        <h3 class="text-sm text-gray-600 mb-2">评论 ({{ comments.length }})</h3>
         <div v-if="!comments.length" class="text-center text-gray-500 py-8 text-sm">还没有评论</div>
-        <div v-for="c in comments" :key="c.id" class="py-3 border-b border-gray-800 last:border-0">
+        <div v-for="c in comments" :key="c.id" class="py-3 border-b border-gray-200 last:border-0">
           <div class="flex gap-3">
             <img
               :src="c.user?.avatar || `https://ui-avatars.com/api/?name=${c.user?.name}`"
@@ -70,18 +70,18 @@ onMounted(load)
             />
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium">{{ c.user?.name }}</p>
-              <p class="text-sm text-gray-300 mt-1 break-words">{{ c.content }}</p>
+              <p class="text-sm text-gray-600 mt-1 break-words">{{ c.content }}</p>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="flex-none border-t border-gray-800 p-2 flex gap-2 safe-bottom">
+    <div class="flex-none border-t border-gray-200 p-2 flex gap-2 safe-bottom">
       <input
         v-model="commentText"
         placeholder="说点什么…"
-        class="flex-1 px-4 py-2 rounded-full bg-gray-900 outline-none"
+        class="flex-1 px-4 py-2 rounded-full bg-gray-50 outline-none"
         @keyup.enter="sendComment"
       />
       <button class="px-4 py-2 rounded-full bg-primary text-white" @click="sendComment">发送</button>

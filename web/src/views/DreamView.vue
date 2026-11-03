@@ -237,21 +237,21 @@ function toggle(keyword: string) {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-black text-white">
-    <header class="flex-none px-4 py-3 border-b border-gray-800 safe-top flex items-center gap-2">
+  <div class="h-full flex flex-col bg-white text-gray-900">
+    <header class="flex-none px-4 py-3 border-b border-gray-200 safe-top flex items-center gap-2">
       <span>🌙</span>
       <h1 class="text-lg font-semibold">周公解梦</h1>
     </header>
 
     <!-- AI 自定义解梦 -->
-    <div class="flex-none border-b border-gray-800 px-4 py-4 bg-gradient-to-b from-purple-950/30 to-transparent">
-      <p class="text-xs text-purple-400 font-medium mb-2">✨ AI 自定义解梦</p>
+    <div class="flex-none border-b border-gray-200 px-4 py-4 bg-gradient-to-b from-purple-100/30 to-transparent">
+      <p class="text-xs text-purple-700 font-medium mb-2">✨ AI 自定义解梦</p>
       <textarea
         v-model="customDesc"
         :disabled="customLoading"
         placeholder="描述你的梦境，越详细越准确……例如：梦见老板的别墅被封了，我们偷偷进去，里面全是课桌椅，然后打电话给大伯把事情处理好了"
         rows="3"
-        class="w-full bg-gray-900 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+        class="w-full bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-600 outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
       />
       <div class="flex items-center gap-2 mt-2">
         <button
@@ -262,7 +262,7 @@ function toggle(keyword: string) {
           <span v-if="customLoading" class="animate-spin">⟳</span>
           <span>{{ customLoading ? '解梦中…' : '开始解梦' }}</span>
         </button>
-        <button v-if="customResult || customDesc" class="px-3 py-2 rounded-xl bg-gray-800 text-gray-400 text-sm" @click="clearCustom">清空</button>
+        <button v-if="customResult || customDesc" class="px-3 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm" @click="clearCustom">清空</button>
       </div>
       <p v-if="customError" class="text-xs text-red-400 mt-2">{{ customError }}</p>
 
@@ -270,33 +270,33 @@ function toggle(keyword: string) {
       <div v-if="customResult" class="mt-3">
         <div class="flex gap-2 mb-2">
           <button
-            :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', customTab === 'traditional' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-800 text-gray-400']"
+            :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', customTab === 'traditional' ? 'bg-yellow-500/20 text-yellow-700' : 'bg-gray-100 text-gray-600']"
             @click="customTab = 'traditional'"
           >周公解梦</button>
           <button
-            :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', customTab === 'freudian' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-400']"
+            :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', customTab === 'freudian' ? 'bg-purple-500/20 text-purple-700' : 'bg-gray-100 text-gray-600']"
             @click="customTab = 'freudian'"
           >弗洛伊德解析</button>
         </div>
-        <div v-if="customTab === 'traditional'" class="bg-gray-900 rounded-xl p-3">
-          <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{{ customResult.traditional }}</p>
+        <div v-if="customTab === 'traditional'" class="bg-gray-50 rounded-xl p-3">
+          <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ customResult.traditional }}</p>
         </div>
-        <div v-else class="bg-gray-900 rounded-xl p-3 border border-purple-500/20">
-          <p class="text-xs text-purple-400 mb-1.5 font-medium">心理学解析</p>
-          <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{{ customResult.freudian }}</p>
+        <div v-else class="bg-gray-50 rounded-xl p-3 border border-purple-500/20">
+          <p class="text-xs text-purple-700 mb-1.5 font-medium">心理学解析</p>
+          <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ customResult.freudian }}</p>
         </div>
       </div>
     </div>
 
     <!-- Search -->
-    <div class="flex-none px-4 py-3 border-b border-gray-800">
+    <div class="flex-none px-4 py-3 border-b border-gray-200">
       <div class="relative">
         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">🔍</span>
         <input
           v-model="query"
           type="text"
           placeholder="搜索梦境关键词，如：蛇、飞翔、火…"
-          class="w-full bg-gray-900 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-primary"
+          class="w-full bg-gray-50 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
     </div>
@@ -307,14 +307,14 @@ function toggle(keyword: string) {
         <span class="text-2xl">🌙</span>
         <p class="text-sm">未找到相关解释</p>
       </div>
-      <div v-else class="divide-y divide-gray-800/50">
+      <div v-else class="divide-y divide-gray-200/50">
         <div v-for="entry in filtered" :key="entry.keyword">
           <!-- Row header -->
           <button
-            class="w-full px-4 py-4 flex justify-between items-center text-left active:bg-gray-900"
+            class="w-full px-4 py-4 flex justify-between items-center text-left active:bg-gray-50"
             @click="toggle(entry.keyword)"
           >
-            <span class="font-semibold text-yellow-400">梦见{{ entry.keyword }}</span>
+            <span class="font-semibold text-yellow-700">梦见{{ entry.keyword }}</span>
             <span class="text-gray-500 text-lg transition-transform" :class="expandedKey === entry.keyword ? 'rotate-180' : ''">⌄</span>
           </button>
 
@@ -323,21 +323,21 @@ function toggle(keyword: string) {
             <!-- Tabs -->
             <div class="flex gap-2 mb-3">
               <button
-                :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', activeTab === 'traditional' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-800 text-gray-400']"
+                :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', activeTab === 'traditional' ? 'bg-yellow-500/20 text-yellow-700' : 'bg-gray-100 text-gray-600']"
                 @click="activeTab = 'traditional'"
               >周公解梦</button>
               <button
-                :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', activeTab === 'freudian' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-400']"
+                :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors', activeTab === 'freudian' ? 'bg-purple-500/20 text-purple-700' : 'bg-gray-100 text-gray-600']"
                 @click="activeTab = 'freudian'"
               >弗洛伊德解析</button>
             </div>
 
-            <div v-if="activeTab === 'traditional'" class="bg-gray-900 rounded-xl p-3">
-              <p class="text-sm text-gray-200 leading-relaxed">{{ entry.traditional }}</p>
+            <div v-if="activeTab === 'traditional'" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-sm text-gray-800 leading-relaxed">{{ entry.traditional }}</p>
             </div>
-            <div v-else class="bg-gray-900 rounded-xl p-3 border border-purple-500/20">
-              <p class="text-xs text-purple-400 mb-1.5 font-medium">心理学解析</p>
-              <p class="text-sm text-gray-200 leading-relaxed">{{ entry.freudian }}</p>
+            <div v-else class="bg-gray-50 rounded-xl p-3 border border-purple-500/20">
+              <p class="text-xs text-purple-700 mb-1.5 font-medium">心理学解析</p>
+              <p class="text-sm text-gray-800 leading-relaxed">{{ entry.freudian }}</p>
             </div>
           </div>
         </div>

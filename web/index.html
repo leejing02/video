@@ -4,17 +4,9 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#f7f7fa" />
-  <script>
-    // Paint the correct safe-area background before Vue and its styles load.
-    const chatPage = /^\/chat\/?$/.test(location.pathname)
-    document.documentElement.classList.toggle('chat-page', chatPage)
-    document.querySelector('meta[name="theme-color"]').content = chatPage ? '#f7f7fa' : '#080808'
-  </script>
-  <style>
-    html, body { background-color: #080808; }
-    html.chat-page, html.chat-page body { background-color: #f7f7fa; color-scheme: light; }
-  </style>
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="color-scheme" content="light" />
+  <style>html, body { background-color: #ffffff; color-scheme: light; }</style>
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />

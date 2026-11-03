@@ -1,25 +1,23 @@
 <script setup lang="ts">
-import type { Video } from '@/types/models'
-defineProps<{ video: Video; layout?: 'horizontal' | 'vertical' }>()
+import { ref } from 'vue'
+import type { ShortVideo, Video } from '@/types/models'
+defineProps<{ video: Video | ShortVideo; layout?: 'horizontal' | 'vertical' }>()
+const failed = ref(false)
 </script>
 
 <template>
-  <div class="flex gap-3 p-3 active:bg-white/5">
-    <div class="w-32 h-20 rounded-lg overflow-hidden bg-white/10 shrink-0 relative">
-      <img v-if="video.cover" :src="video.cover" class="w-full h-full object-cover" />
-      <div v-else class="w-full h-full grid place-items-center text-2xl">🎬</div>
-      <span class="absolute bottom-1 right-1 text-[10px] bg-black/60 px-1 rounded">
-        {{ Math.floor(video.duration / 60) }}:{{ String(video.duration % 60).padStart(2, '0') }}
-      </span>
+  <button class="video-tile" :class="{ landscape: layout === 'horizontal' }" :aria-label="`播放：${video.title}`">
+    <div class="video-poster">
+      <img v-if="video.cover && !failed" :src="video.cover" :alt="video.title" loading="lazy" @error="failed = true" />
+      <div v-else class="poster-fallback"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="32" rx="5"/><path d="m20 17 12 7-12 7Z"/></svg><span>暂无封面</span></div>
+      <span v-if="layout === 'horizontal' && video.duration" class="video-duration">{{ Math.floor(video.duration / 60) }}:{{ String(Math.floor(video.duration % 60)).padStart(2, '0') }}</span>
     </div>
-    <div class="flex-1 min-w-0">
-      <p class="text-sm font-medium line-clamp-2">{{ video.title }}</p>
-      <p class="text-xs text-gray-400 mt-1">{{ video.user?.name || '匿名' }}</p>
-      <p class="text-xs text-gray-500 mt-1 flex gap-3">
-        <span>▶ {{ video.views }}</span>
-        <span>♥ {{ video.likes }}</span>
-        <span>💬 {{ video.comments_count }}</span>
-      </p>
+    <p v-if="layout === 'horizontal'" class="tile-title">{{ video.title }}</p>
+    <div class="tile-meta">
+      <img v-if="video.user?.avatar" class="tile-avatar" :src="video.user.avatar" alt="" loading="lazy" />
+      <span v-else class="tile-avatar avatar-letter">{{ (video.user?.name || video.user?.username || '用')[0] }}</span>
+      <span class="tile-author">{{ video.user?.name || video.user?.username || '用户' }}</span>
+      <span class="tile-likes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21S2 15 2 8.5A5.5 5.5 0 0 1 12 5a5.5 5.5 0 0 1 10 3.5C22 15 12 21 12 21Z" /></svg>{{ video.likes }}</span>
     </div>
-  </div>
+  </button>
 </template>

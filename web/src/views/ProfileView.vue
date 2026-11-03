@@ -5,83 +5,40 @@ import { useAuthStore } from '@/stores/auth'
 import { videoApi } from '@/api/video'
 import VideoCard from '@/components/VideoCard.vue'
 import type { Video } from '@/types/models'
-
 const auth = useAuthStore()
 const router = useRouter()
 const myVideos = ref<Video[]>([])
-
+const loading = ref(false)
+const error = ref(false)
 async function loadVideos() {
-  try {
-    const res = await videoApi.mine(1)
-    myVideos.value = res.data ?? (res as any)
-  } catch {}
+  loading.value = true
+  error.value = false
+  try { myVideos.value = (await videoApi.mine(1)).data ?? [] }
+  catch { error.value = true }
+  finally { loading.value = false }
 }
-
 onMounted(loadVideos)
 </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-y-auto">
-    <header class="px-4 py-3 border-b border-gray-800 safe-top">
-      <h1 class="text-lg font-semibold">我的</h1>
-    </header>
-
-    <section v-if="auth.user" class="p-5 flex items-center gap-4 border-b border-gray-800">
-      <img
-        :src="auth.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth.user.name)}&background=6366f1&color=fff`"
-        class="w-16 h-16 rounded-full"
-      />
-      <div class="flex-1 min-w-0">
-        <p class="font-semibold truncate">{{ auth.user.name }}</p>
-        <p class="text-sm text-gray-400 truncate">@{{ auth.user.username }}</p>
-        <p v-if="auth.user.bio" class="text-xs text-gray-500 mt-1 truncate">{{ auth.user.bio }}</p>
-      </div>
+  <div class="profile-page">
+    <header class="profile-header"><h1>我的</h1><button class="publish-button" @click="router.push('/upload')">＋ 发布</button></header>
+    <section v-if="auth.user" class="profile-identity">
+      <img v-if="auth.user.avatar" :src="auth.user.avatar" class="profile-avatar" alt="我的头像" />
+      <span v-else class="profile-avatar">{{ auth.user.name?.[0] || '我' }}</span>
+      <div><h2>{{ auth.user.name }}</h2><p>@{{ auth.user.username }}</p><p v-if="auth.user.bio" class="profile-bio">{{ auth.user.bio }}</p></div>
     </section>
-
-    <nav class="border-b border-gray-800">
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900" @click="router.push('/upload')">
-        <span class="flex items-center gap-2"><span class="text-primary">📤</span> 上传视频</span>
-        <span class="text-gray-500">›</span>
-      </button>
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900" @click="router.push('/fishing')">
-        <span class="flex items-center gap-2">
-          <span>🎣</span>
-          <span>捕鱼达人</span>
-          <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-medium">游戏</span>
-        </span>
-        <span class="text-gray-500">›</span>
-      </button>
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900" @click="router.push('/fortune')">
-        <span class="flex items-center gap-2">
-          <span>🔯</span>
-          <span>命理中心</span>
-          <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-medium">AI</span>
-        </span>
-        <span class="text-gray-500">›</span>
-      </button>
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900">
-        <span>编辑资料</span><span class="text-gray-500">›</span>
-      </button>
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900">
-        <span>我的评论</span><span class="text-gray-500">›</span>
-      </button>
-      <button class="w-full px-5 py-4 flex justify-between items-center hover:bg-gray-900">
-        <span>设置</span><span class="text-gray-500">›</span>
-      </button>
+    <nav class="profile-links" aria-label="个人功能">
+      <button @click="router.push('/upload')"><span>发布视频</span><span aria-hidden="true">↗</span></button>
+      <button @click="router.push('/fishing')"><span>捕鱼达人</span><span aria-hidden="true">›</span></button>
+      <button @click="router.push('/fortune')"><span>命理中心</span><span aria-hidden="true">›</span></button>
     </nav>
-
-    <section class="p-3">
-      <h2 class="text-sm font-semibold text-gray-400 mb-2 px-1">我的视频</h2>
-      <div v-if="!myVideos.length" class="text-center text-gray-500 py-8 text-sm">还没有发布过视频</div>
-      <div class="space-y-3">
-        <VideoCard v-for="v in myVideos" :key="v.id" :video="v" layout="horizontal" />
-      </div>
+    <section class="profile-works"><h2>作品 <span>{{ myVideos.length }}</span></h2>
+      <p v-if="loading" class="feed-empty">正在加载作品…</p>
+      <div v-else-if="error" class="feed-empty" role="alert"><p>作品加载失败</p><button @click="loadVideos">重试</button></div>
+      <p v-else-if="!myVideos.length" class="feed-empty">还没有发布视频，记录你的第一份精彩吧</p>
+      <div v-else class="video-grid long-grid"><VideoCard v-for="v in myVideos" :key="v.id" :video="v" layout="horizontal" @click="router.push({ name: 'video-detail', params: { id: v.id } })" /></div>
     </section>
-
-    <div class="p-4 mt-auto safe-bottom">
-      <button class="w-full py-3 rounded-xl bg-red-500/20 text-red-400 font-medium" @click="auth.logout()">
-        退出登录
-      </button>
-    </div>
+    <button class="logout-button" @click="auth.logout()">退出登录</button>
   </div>
 </template>

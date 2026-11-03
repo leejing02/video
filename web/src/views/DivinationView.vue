@@ -433,8 +433,8 @@ const shakingSymbol = computed(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-black text-white overflow-y-auto">
-    <header class="flex-none px-4 py-3 border-b border-gray-800 safe-top flex items-center gap-2">
+  <div class="h-full flex flex-col bg-white text-gray-900 overflow-y-auto">
+    <header class="flex-none px-4 py-3 border-b border-gray-200 safe-top flex items-center gap-2">
       <span>🔮</span>
       <h1 class="text-lg font-semibold">易经卜卦</h1>
     </header>
@@ -443,7 +443,7 @@ const shakingSymbol = computed(() => {
     <div v-if="phase === 'idle'" class="flex-1 flex flex-col items-center justify-center gap-8 px-6">
       <div class="text-center">
         <div class="text-7xl mb-4">☯</div>
-        <p class="text-gray-400 text-sm leading-relaxed">静心凝神，诚意求卦<br>点击铜钱，摇出卦象</p>
+        <p class="text-gray-600 text-sm leading-relaxed">静心凝神，诚意求卦<br>点击铜钱，摇出卦象</p>
       </div>
       <button
         class="w-40 h-40 rounded-full bg-gradient-to-br from-yellow-600 to-yellow-900 border-4 border-yellow-500 text-5xl shadow-lg active:scale-95 transition-transform flex items-center justify-center"
@@ -455,7 +455,7 @@ const shakingSymbol = computed(() => {
     <!-- Shaking -->
     <div v-else-if="phase === 'shaking'" class="flex-1 flex flex-col items-center justify-center gap-6">
       <div class="text-8xl animate-bounce select-none">{{ shakingSymbol }}</div>
-      <p class="text-yellow-400 text-sm tracking-widest">卜卦中…</p>
+      <p class="text-yellow-700 text-sm tracking-widest">卜卦中…</p>
       <div class="flex gap-2">
         <span v-for="i in 6" :key="i" class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" :style="{ animationDelay: `${i * 0.1}s` }" />
       </div>
@@ -466,8 +466,8 @@ const shakingSymbol = computed(() => {
       <!-- Header -->
       <div class="flex flex-col items-center gap-1">
         <div class="text-6xl mb-1">{{ result.symbol }}</div>
-        <h2 class="text-2xl font-bold text-yellow-400">第{{ result.num }}卦 · {{ result.name }}卦</h2>
-        <p class="text-sm text-gray-400">{{ result.judgment }}</p>
+        <h2 class="text-2xl font-bold text-yellow-700">第{{ result.num }}卦 · {{ result.name }}卦</h2>
+        <p class="text-sm text-gray-600">{{ result.judgment }}</p>
       </div>
 
       <!-- Lines -->
@@ -487,31 +487,31 @@ const shakingSymbol = computed(() => {
 
       <!-- Interpretation sections -->
       <div class="space-y-3">
-        <div class="bg-gray-900 rounded-2xl p-4">
-          <h3 class="text-xs font-semibold text-yellow-400 mb-1.5">总体运势</h3>
-          <p class="text-sm text-gray-200 leading-relaxed">{{ result.overall }}</p>
+        <div class="bg-gray-50 rounded-2xl p-4">
+          <h3 class="text-xs font-semibold text-yellow-700 mb-1.5">总体运势</h3>
+          <p class="text-sm text-gray-800 leading-relaxed">{{ result.overall }}</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="bg-gray-900 rounded-2xl p-3">
-            <h3 class="text-xs font-semibold text-blue-400 mb-1">💼 事业</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">{{ result.career }}</p>
+          <div class="bg-gray-50 rounded-2xl p-3">
+            <h3 class="text-xs font-semibold text-blue-700 mb-1">💼 事业</h3>
+            <p class="text-xs text-gray-700 leading-relaxed">{{ result.career }}</p>
           </div>
-          <div class="bg-gray-900 rounded-2xl p-3">
+          <div class="bg-gray-50 rounded-2xl p-3">
             <h3 class="text-xs font-semibold text-pink-400 mb-1">❤️ 感情</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">{{ result.love }}</p>
+            <p class="text-xs text-gray-700 leading-relaxed">{{ result.love }}</p>
           </div>
-          <div class="bg-gray-900 rounded-2xl p-3">
-            <h3 class="text-xs font-semibold text-green-400 mb-1">💰 财运</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">{{ result.wealth }}</p>
+          <div class="bg-gray-50 rounded-2xl p-3">
+            <h3 class="text-xs font-semibold text-green-700 mb-1">💰 财运</h3>
+            <p class="text-xs text-gray-700 leading-relaxed">{{ result.wealth }}</p>
           </div>
-          <div class="bg-gray-900 rounded-2xl p-3">
-            <h3 class="text-xs font-semibold text-orange-400 mb-1">🧭 建议</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">{{ result.advice }}</p>
+          <div class="bg-gray-50 rounded-2xl p-3">
+            <h3 class="text-xs font-semibold text-orange-700 mb-1">🧭 建议</h3>
+            <p class="text-xs text-gray-700 leading-relaxed">{{ result.advice }}</p>
           </div>
         </div>
       </div>
 
-      <button class="w-full py-3 rounded-xl bg-yellow-600/20 text-yellow-400 font-medium active:opacity-70" @click="reset">
+      <button class="w-full py-3 rounded-xl bg-yellow-600/20 text-yellow-700 font-medium active:opacity-70" @click="reset">
         重新起卦
       </button>
     </div>

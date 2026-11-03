@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { provide, ref, watch, onUnmounted } from 'vue'
+import { provide, ref } from 'vue'
 const chatDetailOpen = ref(false)
-provide('chatDetailOpen', chatDetailOpen)
+provide('mainNavigationHidden', chatDetailOpen)
 const route = useRoute()
 const router = useRouter()
-function setChatTheme(chat: boolean) {
-  document.documentElement.classList.toggle('chat-page', chat)
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', chat ? '#f7f7fa' : '#080808')
-}
-watch(() => route.name, name => setChatTheme(name === 'chat'), { immediate: true })
-onUnmounted(() => setChatTheme(false))
 const tabs = [
   { name: 'chat', label: '群聊', path: 'M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H3V6a2 2 0 0 1 2-2ZM7 9h10M7 13h6' },
   { name: 'short', label: '短视频', path: 'M9 3h6v4h4v10h-4v4H9v-4H5V7h4V3Zm1 6 5 3-5 3V9Z' },

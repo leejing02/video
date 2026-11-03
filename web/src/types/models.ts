@@ -133,6 +133,9 @@ export interface LiveStream {
 
 export interface Paginated<T> {
   data: T[]
+  total?: number
+  page?: number
+  per_page?: number
   meta?: {
     total: number
     per_page: number

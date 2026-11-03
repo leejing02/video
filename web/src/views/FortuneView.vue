@@ -9,8 +9,8 @@ const features = [
     title: '八字命理',
     subtitle: 'AI 深度解读四柱大运',
     badge: 'AI',
-    badgeColor: 'bg-purple-500/20 text-purple-400',
-    gradient: 'from-purple-900/60 to-indigo-900/60',
+    badgeColor: 'bg-purple-500/20 text-purple-700',
+    gradient: 'from-purple-50 to-indigo-50',
     border: 'border-purple-700/30',
     route: '/bazi',
   },
@@ -19,8 +19,8 @@ const features = [
     title: '易经卜卦',
     subtitle: '六十四卦洞察运势',
     badge: '卦象',
-    badgeColor: 'bg-yellow-500/20 text-yellow-400',
-    gradient: 'from-yellow-900/40 to-amber-900/40',
+    badgeColor: 'bg-yellow-500/20 text-yellow-700',
+    gradient: 'from-yellow-50 to-amber-50',
     border: 'border-yellow-700/30',
     route: '/divination',
   },
@@ -29,8 +29,8 @@ const features = [
     title: '周公解梦',
     subtitle: 'AI 解析梦境深层含义',
     badge: 'AI',
-    badgeColor: 'bg-blue-500/20 text-blue-400',
-    gradient: 'from-blue-900/50 to-indigo-900/50',
+    badgeColor: 'bg-blue-500/20 text-blue-700',
+    gradient: 'from-blue-50 to-indigo-50',
     border: 'border-blue-700/30',
     route: '/dream',
   },
@@ -47,7 +47,7 @@ const randomTip = tips[Math.floor(Date.now() / 86400000) % tips.length]
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-black text-white overflow-y-auto">
+  <div class="h-full flex flex-col bg-white text-gray-900 overflow-y-auto">
 
     <!-- Header -->
     <header class="flex-none px-5 pt-5 pb-4 safe-top">
@@ -61,8 +61,8 @@ const randomTip = tips[Math.floor(Date.now() / 86400000) % tips.length]
     </header>
 
     <!-- Daily tip -->
-    <div class="mx-5 mb-5 px-4 py-3 rounded-2xl bg-indigo-950/60 border border-indigo-800/30">
-      <p class="text-xs text-indigo-300 leading-relaxed">
+    <div class="mx-5 mb-5 px-4 py-3 rounded-2xl bg-indigo-50 border border-indigo-800/30">
+      <p class="text-xs text-indigo-700 leading-relaxed">
         <span class="text-indigo-500 mr-1">✦</span>{{ randomTip }}
       </p>
     </div>
@@ -82,9 +82,9 @@ const randomTip = tips[Math.floor(Date.now() / 86400000) % tips.length]
             {{ features[0].badge }}
           </span>
         </div>
-        <div class="text-lg font-bold text-white mb-1">{{ features[0].title }}</div>
-        <div class="text-sm text-gray-400">{{ features[0].subtitle }}</div>
-        <div class="mt-4 flex items-center gap-1.5 text-sm text-purple-300 font-medium">
+        <div class="text-lg font-bold text-gray-900 mb-1">{{ features[0].title }}</div>
+        <div class="text-sm text-gray-600">{{ features[0].subtitle }}</div>
+        <div class="mt-4 flex items-center gap-1.5 text-sm text-purple-700 font-medium">
           <span>输入生辰，排盘解命</span>
           <span class="text-base">›</span>
         </div>
@@ -100,14 +100,14 @@ const randomTip = tips[Math.floor(Date.now() / 86400000) % tips.length]
           @click="router.push(f.route)"
         >
           <span class="text-3xl block mb-2">{{ f.icon }}</span>
-          <div class="text-sm font-bold text-white mb-0.5">{{ f.title }}</div>
-          <div class="text-xs text-gray-400 leading-snug">{{ f.subtitle }}</div>
+          <div class="text-sm font-bold text-gray-900 mb-0.5">{{ f.title }}</div>
+          <div class="text-xs text-gray-600 leading-snug">{{ f.subtitle }}</div>
         </button>
       </div>
 
       <!-- How it works -->
-      <div class="rounded-2xl bg-gray-900/80 border border-gray-800/50 p-4 mt-1">
-        <h3 class="text-xs font-semibold text-gray-400 mb-3 tracking-wider">命理系统说明</h3>
+      <div class="rounded-2xl bg-gray-50/80 border border-gray-200/50 p-4 mt-1">
+        <h3 class="text-xs font-semibold text-gray-600 mb-3 tracking-wider">命理系统说明</h3>
         <div class="space-y-2.5">
           <div v-for="(step, i) in [
             ['四柱', '年月日时干支，构成命盘骨架'],
@@ -115,11 +115,11 @@ const randomTip = tips[Math.floor(Date.now() / 86400000) % tips.length]
             ['大运流年', '十年一换，岁岁更新，精算时机'],
             ['AI 解读', 'Claude 深度解析，避免迷信化'],
           ]" :key="i" class="flex items-start gap-3">
-            <span class="flex-none w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-400 text-xs flex items-center justify-center font-bold">
+            <span class="flex-none w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-700 text-xs flex items-center justify-center font-bold">
               {{ i + 1 }}
             </span>
             <div>
-              <span class="text-xs font-semibold text-gray-200">{{ step[0] }}</span>
+              <span class="text-xs font-semibold text-gray-800">{{ step[0] }}</span>
               <span class="text-xs text-gray-500 ml-1.5">{{ step[1] }}</span>
             </div>
           </div>
