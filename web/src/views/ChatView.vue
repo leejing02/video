@@ -5,6 +5,7 @@ import { chatApi } from '@/api/chat'
 import { WsClient } from '@/utils/ws'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import AvatarContent from '@/components/AvatarContent.vue'
 import type { ChatRoom, ChatMessage as Message } from '@/types/models'
 
 const auth = useAuthStore()
@@ -163,7 +164,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
       <div v-if="error && !mobileOpen" class="chat-error" role="alert">{{ error }} <button @click="recover">刷新</button></div>
       <div class="conversation-items">
         <button v-for="item in filtered" :key="item.id" class="conversation-row" :class="{ selected: selected === item.id }" @click="selectRoom(item)">
-          <div class="room-avatar" :class="{ direct: item.kind === 'direct' }"><img v-if="item.cover" :src="item.cover" alt="" /><span v-else>{{ item.name.slice(0,1) }}</span><i v-if="item.kind !== 'direct'">#</i></div>
+          <div class="room-avatar" :class="{ direct: item.kind === 'direct' }"><AvatarContent :src="item.cover" :name="item.name" /><i v-if="item.kind !== 'direct'">#</i></div>
           <div class="conversation-copy"><div class="conversation-title"><strong>{{ item.name }}</strong><time>{{ time(item.last_message_at) }}</time></div><div class="conversation-preview"><span>{{ item.last_message || (item.kind === 'direct' ? '开始你们的对话' : '点击进入群聊') }}</span><b v-if="item.unread_count">{{ item.unread_count > 99 ? '99+' : item.unread_count }}</b></div></div>
         </button>
         <div v-if="!filtered.length" class="chat-placeholder"><span>✉</span><p>暂无{{ filter === 'direct' ? '私聊' : '会话' }}</p><small>在群聊中点击成员头像，即可发起私聊</small></div>
@@ -171,7 +172,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
     </aside>
     <section class="conversation-detail">
       <template v-if="room">
-        <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="mobileOpen = false">‹</button><div class="header-avatar">{{ room.name.slice(0,1) }}</div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
+        <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="mobileOpen = false">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
         <div v-if="error" class="chat-error" role="alert">{{ error }}<button @click="error = ''">关闭</button></div>
         <div ref="scrollEl" class="message-timeline">
           <div class="timeline-label">{{ room.kind === 'direct' ? '你们的对话，从这里开始' : '一起聊聊新鲜事' }}</div>
