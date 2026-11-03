@@ -107,3 +107,28 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 	maxMsgSize = 8 << 10 // 8 KB
 )
+
+// Notify sends conversation updates only to authorized user subscriptions (room 0).
+// A nil list is reserved for the global room; an empty list sends to nobody.
+func (h *Hub) Notify(ids []int64, event string, data any) {
+	payload, err := json.Marshal(Envelope{Event: event, Data: data})
+	if err != nil {
+		return
+	}
+	allowed := map[int64]bool{}
+	for _, id := range ids {
+		allowed[id] = true
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.rooms[0] {
+		if ids != nil && !allowed[c.userID] {
+			continue
+		}
+		select {
+		case c.send <- payload:
+		default:
+			go h.unregister(c)
+		}
+	}
+}

@@ -3,28 +3,32 @@ type Listener = (data: any) => void
 export class WsClient {
   private ws: WebSocket | null = null
   private listeners = new Map<string, Listener[]>()
-  private reconnectTimer: number | null = null
-  private heartbeatTimer: number | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private generation = 0
   private retries = 0
-  private destroyed = false
+  private stopped = true
   private roomId = 0
   private token = ''
   private baseURL = ''
 
   connect(roomId: number, token: string, baseURL: string) {
+    this.disconnect()
     this.roomId = roomId
     this.token = token
     this.baseURL = baseURL
-    this.destroyed = false
+    this.stopped = false
     this.retries = 0
-    this.openSocket()
+    this.openSocket(this.generation)
   }
 
   disconnect() {
-    this.destroyed = true
-    this.clearTimers()
-    this.ws?.close(1000, 'client disconnect')
+    this.stopped = true
+    this.generation++
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
+    const previous = this.ws
     this.ws = null
+    previous?.close(1000, 'client disconnect')
   }
 
   on(event: string, cb: Listener) {
@@ -35,62 +39,48 @@ export class WsClient {
   }
 
   off(event: string, cb: Listener) {
-    const list = this.listeners.get(event)
-    if (list) this.listeners.set(event, list.filter(l => l !== cb))
+    this.listeners.set(event, (this.listeners.get(event) ?? []).filter(item => item !== cb))
   }
 
-  reconnect() { this.ws?.close() }
+  reconnect() {
+    if (!this.stopped) this.connect(this.roomId, this.token, this.baseURL)
+  }
 
-  private openSocket() {
-    const proto = this.baseURL.startsWith('https') ? 'wss' : 'ws'
-    const host = this.baseURL.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    const url = `${proto}://${host}/ws/chat?room_id=${this.roomId}&token=${encodeURIComponent(this.token)}`
-    try {
-      this.ws = new WebSocket(url)
-    } catch {
-      this.scheduleReconnect()
-      return
-    }
-    this.ws.onopen = () => {
+  private openSocket(generation: number) {
+    if (this.stopped || generation !== this.generation) return
+    const url = new URL('/ws/chat', this.baseURL)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    url.searchParams.set('room_id', String(this.roomId))
+    url.searchParams.set('token', this.token)
+    let socket: WebSocket
+    try { socket = new WebSocket(url.toString()) }
+    catch { this.retry(generation); return }
+    this.ws = socket
+    const current = () => !this.stopped && generation === this.generation && this.ws === socket
+    socket.onopen = () => {
+      if (!current()) return
       this.retries = 0
-      this.startHeartbeat()
       this.emit('open', null)
     }
-    this.ws.onmessage = e => {
-      this.startHeartbeat()
+    socket.onmessage = event => {
+      if (!current()) return
       try {
-        const msg = JSON.parse(e.data)
-        if (msg && typeof msg.event === 'string') this.emit(msg.event, msg.data)
-      } catch {}
+        const message = JSON.parse(event.data)
+        if (typeof message.event === 'string') this.emit(message.event, message.data)
+      } catch { /* Ignore invalid envelopes; do not disrupt the connection. */ }
     }
-    this.ws.onerror = () => this.emit('error', null)
-    this.ws.onclose = e => {
-      this.emit('close', e.code)
-      this.clearTimers()
-      if (!this.destroyed) this.scheduleReconnect()
+    socket.onerror = () => { if (current()) this.emit('error', null) }
+    socket.onclose = event => {
+      if (!current()) return
+      this.emit('close', event.code)
+      this.retry(generation)
     }
   }
 
-  private scheduleReconnect() {
-    if (this.destroyed) return
-    this.retries++
-    const delay = Math.min(30000, 1000 * 2 ** Math.min(5, this.retries))
-    this.reconnectTimer = window.setTimeout(() => this.openSocket(), delay)
-  }
-
-  private startHeartbeat() {
-    if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer)
-    this.heartbeatTimer = window.setTimeout(() => {
-      try { this.ws?.send(JSON.stringify({ event: 'ping' })) }
-      catch { this.reconnect() }
-    }, 30000)
-  }
-
-  private clearTimers() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
-    if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer)
-    this.reconnectTimer = null
-    this.heartbeatTimer = null
+  private retry(generation: number) {
+    if (this.stopped || generation !== this.generation) return
+    const delay = Math.min(30000, 1000 * 2 ** Math.min(5, this.retries++))
+    this.timer = setTimeout(() => { this.timer = null; this.openSocket(generation) }, delay)
   }
 
   private emit(event: string, data: any) {

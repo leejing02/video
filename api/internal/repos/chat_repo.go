@@ -84,6 +84,10 @@ func (r *ChatRepo) MarkRead(roomID, userID int64) error {
 
 // Messages 历史消息（游标 before_id）
 func (r *ChatRepo) Messages(roomID int64, beforeID int64, limit int) ([]models.ChatMessageWithUser, error) {
+	return r.messages(roomID, beforeID, 0, limit, false)
+}
+
+func (r *ChatRepo) messages(roomID, beforeID, afterID int64, limit int, forward bool) ([]models.ChatMessageWithUser, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
@@ -104,7 +108,12 @@ func (r *ChatRepo) Messages(roomID int64, beforeID int64, limit int) ([]models.C
 		q += " AND m.id < ?"
 		args = append(args, beforeID)
 	}
-	q += " ORDER BY m.id DESC LIMIT ?"
+	if forward {
+		q += " AND m.id > ? ORDER BY m.id ASC LIMIT ?"
+		args = append(args, afterID)
+	} else {
+		q += " ORDER BY m.id DESC LIMIT ?"
+	}
 	args = append(args, limit)
 	if err := r.DB.Select(&rows, q, args...); err != nil {
 		return nil, err
@@ -112,7 +121,11 @@ func (r *ChatRepo) Messages(roomID int64, beforeID int64, limit int) ([]models.C
 
 	out := make([]models.ChatMessageWithUser, 0, len(rows))
 	for i := len(rows) - 1; i >= 0; i-- {
-		rr := rows[i]
+		index := i
+		if forward {
+			index = len(rows) - 1 - i
+		}
+		rr := rows[index]
 		out = append(out, models.ChatMessageWithUser{
 			ChatMessage: rr.ChatMessage,
 			User: &models.PublicUser{

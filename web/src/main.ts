@@ -20,3 +20,17 @@ window.addEventListener('auth:unauthorized', () => {
 })
 
 app.mount('#app')
+
+// Keep the conversation composer above the mobile keyboard.
+function resizeViewport() {
+  const viewport = window.visualViewport
+  if (!viewport || viewport.scale === 1) {
+    document.documentElement.style.setProperty('--app-height', `${viewport?.height ?? window.innerHeight}px`)
+  }
+}
+resizeViewport()
+window.visualViewport?.addEventListener('resize', resizeViewport)
+window.addEventListener('resize', resizeViewport)
+// Safari gesture events are separate from pointer touch-action handling.
+document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false })
+document.addEventListener('gesturechange', event => event.preventDefault(), { passive: false })

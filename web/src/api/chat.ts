@@ -1,5 +1,5 @@
 import { get, post } from './client'
-import type { ChatRoom, ChatMessage, Paginated } from '@/types/models'
+import type { ChatRoom, ChatMessage } from '@/types/models'
 
 export const chatApi = {
   globalRoom: () => get<ChatRoom>('/chat/global'),
@@ -7,10 +7,16 @@ export const chatApi = {
   myRooms: () => get<ChatRoom[]>('/chat/rooms'),
 
   messages: (roomId: number, beforeId?: number, limit = 30) =>
-    get<Paginated<ChatMessage>>(`/chat/rooms/${roomId}/messages`, {
+    get<ChatMessage[]>(`/chat/rooms/${roomId}/messages`, {
       before_id: beforeId,
       limit,
     }),
+
+  messagesAfter: (roomId: number, afterId: number, limit = 100) =>
+    get<ChatMessage[]>(`/chat/rooms/${roomId}/messages`, { after_id: afterId, limit }),
+
+  direct: (userId: number, contextRoomId: number) =>
+    post<ChatRoom>('/chat/direct', { user_id: userId, context_room_id: contextRoomId }),
 
   send: (roomId: number, content: string, replyToId?: number) =>
     post<ChatMessage>(`/chat/rooms/${roomId}/messages`, {

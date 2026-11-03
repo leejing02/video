@@ -132,8 +132,8 @@ func calcStartAge(birth time.Time, forward bool) float64 {
 func Calculate(birth time.Time, male bool) Chart {
 	// Year pillar
 	by := baziYear(birth)
-	yGan := ((by - 4) % 10 + 10) % 10
-	yZhi := ((by - 4) % 12 + 12) % 12
+	yGan := ((by-4)%10 + 10) % 10
+	yZhi := ((by-4)%12 + 12) % 12
 	yearP := makePillar(yGan, yZhi)
 
 	// Month pillar
@@ -175,7 +175,7 @@ func Calculate(birth time.Time, male bool) Chart {
 		if forward {
 			idx = (baseIdx + i + 1) % 60
 		} else {
-			idx = ((baseIdx - i - 1) % 60 + 60) % 60
+			idx = ((baseIdx-i-1)%60 + 60) % 60
 		}
 		dayuns[i] = DayunItem{
 			Age:    int(startAge) + i*10,

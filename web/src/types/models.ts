@@ -87,9 +87,14 @@ export interface ChatRoom {
   name: string
   slug: string
   description: string | null
-  type: string
+  cover: string | null
+  kind: 'global' | 'group' | 'direct'
   is_active: boolean
-  owner_id: number
+  owner_id: number | null
+  last_message: string
+  unread_count: number
+  member_count: number
+  last_message_at: string | null
 }
 
 export interface ChatMessage {

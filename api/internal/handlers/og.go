@@ -23,8 +23,9 @@ import (
 )
 
 // OGHandler serves:
-//   GET /chart/:token        — index.html with OG meta tags injected
-//   GET /api/og/chart/:token — 1200×630 PNG preview image
+//
+//	GET /chart/:token        — index.html with OG meta tags injected
+//	GET /api/og/chart/:token — 1200×630 PNG preview image
 type OGHandler struct {
 	Repo        *repos.BaziRepo
 	WebDistPath string // path to web/dist directory
@@ -128,7 +129,9 @@ func (h *OGHandler) indexHTMLPath() string {
 
 // ─── PNG generator ────────────────────────────────────────────────────────────
 
-const (ogW, ogH = 1200, 630)
+const (
+	ogW, ogH = 1200, 630
+)
 
 var (
 	bgColor = color.RGBA{13, 13, 20, 255}
@@ -140,21 +143,25 @@ var (
 		"金": {156, 163, 175, 255},
 		"水": {59, 130, 246, 255},
 	}
-	ganWX = []string{"木","木","火","火","土","土","金","金","水","水"}
-	zhiWX = []string{"水","土","木","木","土","火","火","土","金","金","土","水"}
-	ganCh = []string{"甲","乙","丙","丁","戊","己","庚","辛","壬","癸"}
-	zhiCh = []string{"子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"}
+	ganWX = []string{"木", "木", "火", "火", "土", "土", "金", "金", "水", "水"}
+	zhiWX = []string{"水", "土", "木", "木", "土", "火", "火", "土", "金", "金", "土", "水"}
+	ganCh = []string{"甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"}
+	zhiCh = []string{"子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"}
 )
 
 func elementOfGan(g string) string {
 	for i, s := range ganCh {
-		if s == g { return ganWX[i] }
+		if s == g {
+			return ganWX[i]
+		}
 	}
 	return "土"
 }
 func elementOfZhi(z string) string {
 	for i, s := range zhiCh {
-		if s == z { return zhiWX[i] }
+		if s == z {
+			return zhiWX[i]
+		}
 	}
 	return "土"
 }
@@ -178,9 +185,16 @@ func generateOGImage(wx map[string]int, pillars [4]string, birthday string) imag
 
 		ganEl, zhiEl := "土", "土"
 		ganStr, zhiStr := "", ""
-		if len(runes) >= 1 { ganStr = string(runes[0]); ganEl = elementOfGan(ganStr) }
-		if len(runes) >= 2 { zhiStr = string(runes[1]); zhiEl = elementOfZhi(zhiStr) }
-		_ = ganStr; _ = zhiStr
+		if len(runes) >= 1 {
+			ganStr = string(runes[0])
+			ganEl = elementOfGan(ganStr)
+		}
+		if len(runes) >= 2 {
+			zhiStr = string(runes[1])
+			zhiEl = elementOfZhi(zhiStr)
+		}
+		_ = ganStr
+		_ = zhiStr
 
 		// Gan block
 		ganCol := wxColors[ganEl]
@@ -193,10 +207,12 @@ func generateOGImage(wx map[string]int, pillars [4]string, birthday string) imag
 	}
 
 	// ── five-element bars (right zone) ────────────────────────────────
-	elOrder := []string{"木","火","土","金","水"}
+	elOrder := []string{"木", "火", "土", "金", "水"}
 	maxVal := 1
 	for _, v := range wx {
-		if v > maxVal { maxVal = v }
+		if v > maxVal {
+			maxVal = v
+		}
 	}
 	barX, barMaxW := 700, 380
 	barH, barGap, barTop := 38, 20, 115
@@ -209,7 +225,9 @@ func generateOGImage(wx map[string]int, pillars [4]string, birthday string) imag
 		fillRect(img, barX, y, barMaxW, barH, color.RGBA{25, 25, 38, 255})
 		if val > 0 {
 			w := barMaxW * val / (maxVal + 1)
-			if w < 12 { w = 12 }
+			if w < 12 {
+				w = 12
+			}
 			fillRect(img, barX, y, w, barH, col)
 		}
 		ascii(img, barX+barMaxW+16, y+barH/2-6, fmt.Sprintf("%d", val), color.RGBA{200, 200, 220, 255})

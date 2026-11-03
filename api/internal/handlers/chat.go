@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -35,7 +36,7 @@ func (h *ChatHandler) Global(c *gin.Context) {
 // GET /chat/rooms
 func (h *ChatHandler) MyRooms(c *gin.Context) {
 	uid := middleware.CurrentUserID(c)
-	rooms, err := h.Chat.UserRooms(uid)
+	rooms, err := h.Chat.Conversations(uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -52,7 +53,19 @@ func (h *ChatHandler) Messages(c *gin.Context) {
 	if err := h.ensureCanRead(c, roomID); err != nil {
 		return // 错误已写
 	}
-	msgs, err := h.Chat.Messages(roomID, beforeID, limit)
+	afterRaw, hasAfter := c.GetQuery("after_id")
+	afterID, cursorErr := strconv.ParseInt(afterRaw, 10, 64)
+	if hasAfter && (cursorErr != nil || afterID < 0 || beforeID > 0) {
+		c.JSON(400, gin.H{"error": "invalid message cursor"})
+		return
+	}
+	var msgs []models.ChatMessageWithUser
+	var err error
+	if hasAfter {
+		msgs, err = h.Chat.MessagesAfter(roomID, afterID, limit)
+	} else {
+		msgs, err = h.Chat.Messages(roomID, beforeID, limit)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -103,6 +116,14 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	full, err := h.Chat.LoadMessageWithUser(m.ID)
 	if err == nil && full != nil {
 		h.Hub.Broadcast(roomID, "message.sent", full)
+		room, roomErr := h.Chat.RoomByID(roomID)
+		if roomErr == nil && room != nil {
+			if room.Kind == "global" {
+				h.Hub.Notify(nil, "message.sent", full)
+			} else if ids, e := h.Chat.Recipients(roomID); e == nil {
+				h.Hub.Notify(ids, "message.sent", full)
+			}
+		}
 	}
 	c.JSON(http.StatusCreated, full)
 }
@@ -112,7 +133,7 @@ func (h *ChatHandler) Join(c *gin.Context) {
 	roomID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	uid := middleware.CurrentUserID(c)
 	r, err := h.Chat.RoomByID(roomID)
-	if err != nil || r == nil {
+	if err != nil || r == nil || !r.IsActive {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -160,7 +181,7 @@ func (h *ChatHandler) MarkRead(c *gin.Context) {
 func (h *ChatHandler) WSConnect(c *gin.Context) {
 	roomID, _ := strconv.ParseInt(c.Query("room_id"), 10, 64)
 	token := c.Query("token")
-	if roomID == 0 || token == "" {
+	if roomID < 0 || token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "room_id 和 token 必填"})
 		return
 	}
@@ -169,9 +190,13 @@ func (h *ChatHandler) WSConnect(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		return
 	}
+	if roomID == 0 {
+		_ = ws.Serve(h.Hub, c.Writer, c.Request, 0, claims.UserID)
+		return
+	}
 	// 房间存在 + 用户能进
 	r, err := h.Chat.RoomByID(roomID)
-	if err != nil || r == nil {
+	if err != nil || r == nil || !r.IsActive {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return
 	}
@@ -195,7 +220,7 @@ func (h *ChatHandler) ensureCanRead(c *gin.Context, roomID int64) error {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return err
 	}
-	if r == nil {
+	if r == nil || !r.IsActive {
 		c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
 		return ErrNotFound
 	}
@@ -224,3 +249,28 @@ var (
 type stringError string
 
 func (e stringError) Error() string { return string(e) }
+
+// Direct only allows a peer selected from an accessible group, never a public user directory.
+func (h *ChatHandler) Direct(c *gin.Context) {
+	var req struct {
+		UserID        int64 `json:"user_id" binding:"required,gt=0"`
+		ContextRoomID int64 `json:"context_room_id" binding:"required,gt=0"`
+	}
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(422, gin.H{"error": "请选择群成员"})
+		return
+	}
+	if h.ensureCanRead(c, req.ContextRoomID) != nil {
+		return
+	}
+	room, err := h.Chat.Direct(middleware.CurrentUserID(c), req.UserID, req.ContextRoomID)
+	if errors.Is(err, repos.ErrInvalidPeer) {
+		c.JSON(403, gin.H{"error": "无法与该成员发起私聊"})
+		return
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"error": "创建私聊失败"})
+		return
+	}
+	c.JSON(200, room)
+}

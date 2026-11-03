@@ -42,7 +42,7 @@ function switchMode(m: 'login' | 'register') {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col safe-top safe-bottom px-6 pt-16 bg-black text-white">
+  <div class="h-full overflow-y-auto flex flex-col safe-top safe-bottom px-6 pt-16 bg-black text-white">
     <h1 class="text-3xl font-bold mb-1">{{ mode === 'login' ? '登录' : '注册' }}</h1>
     <p class="text-gray-400 text-sm mb-6">
       {{ mode === 'login' ? '还没账号？' : '已有账号？' }}

@@ -18,7 +18,7 @@ const router = createRouter({
         { path: 'chat',    name: 'chat',         component: () => import('@/views/ChatView.vue') },
         { path: 'long',    name: 'long',         component: () => import('@/views/LongVideoView.vue') },
         { path: 'short',   name: 'short',        component: () => import('@/views/ShortVideoView.vue') },
-        { path: 'live',    name: 'live',         component: () => import('@/views/LiveView.vue') },
+        { path: 'live', redirect: '/short' },
         { path: 'fortune', name: 'fortune',      component: () => import('@/views/FortuneView.vue') },
         { path: 'me',      name: 'me',           component: () => import('@/views/ProfileView.vue') },
         { path: 'divination', name: 'divination', component: () => import('@/views/DivinationView.vue') },

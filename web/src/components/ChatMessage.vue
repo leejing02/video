@@ -1,23 +1,15 @@
 <script setup lang="ts">
 import type { ChatMessage } from '@/types/models'
-defineProps<{ message: ChatMessage; isMine: boolean }>()
+defineProps<{ message: ChatMessage; isMine: boolean; allowDirect?: boolean }>()
+defineEmits<{ direct: [] }>()
+function time(value: string) { return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 </script>
 
 <template>
-  <div :class="['flex gap-2 items-end', isMine ? 'flex-row-reverse' : '']">
-    <img
-      v-if="message.user?.avatar"
-      :src="message.user.avatar"
-      class="w-8 h-8 rounded-full shrink-0"
-    />
-    <div v-else class="w-8 h-8 rounded-full bg-white/20 grid place-items-center text-xs shrink-0">
-      {{ message.user?.username?.[0]?.toUpperCase() ?? '?' }}
-    </div>
-    <div :class="['max-w-[70%]', isMine ? 'items-end' : 'items-start', 'flex flex-col']">
-      <span v-if="!isMine" class="text-xs text-gray-400 mb-0.5 px-1">{{ message.user?.username }}</span>
-      <div :class="['px-3 py-2 rounded-2xl text-sm', isMine ? 'bg-primary text-white rounded-br-sm' : 'bg-white/10 rounded-bl-sm']">
-        {{ message.content }}
-      </div>
-    </div>
+  <div class="message-row" :class="{ mine: isMine }">
+    <button v-if="!isMine" class="sender-avatar" :disabled="!allowDirect" :aria-label="allowDirect ? `与 ${message.user?.name || '群成员'} 私聊` : '会话成员'" @click="$emit('direct')">
+      <img v-if="message.user?.avatar" :src="message.user.avatar" alt="" /><span v-else>{{ (message.user?.name || message.user?.username || '?').slice(0,1) }}</span>
+    </button>
+    <div class="message-bubble"><button v-if="!isMine" class="sender-name" :disabled="!allowDirect" @click="$emit('direct')">{{ message.user?.name || message.user?.username || '群成员' }}</button><p>{{ message.content }}</p><div class="message-meta"><time>{{ time(message.created_at) }}</time><span v-if="isMine" aria-label="已发送">✓</span></div></div>
   </div>
 </template>

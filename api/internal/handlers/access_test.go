@@ -75,6 +75,20 @@ func TestChatMembershipAccess(t *testing.T) {
 	}
 }
 
+func TestInactiveRoomCannotBeRead(t *testing.T) {
+	db, mock := accessTestDB(t)
+	mock.ExpectQuery("SELECT .* FROM chat_rooms WHERE id").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "kind", "is_active"}).AddRow(7, "global", false))
+	h := &ChatHandler{Chat: repos.NewChatRepo(db)}
+	r := gin.New()
+	r.GET("/rooms/:id/messages", h.Messages)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/rooms/7/messages", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
 func TestPublicVideoVisibility(t *testing.T) {
 	for _, path := range []string{"/videos/7", "/short-videos/7", "/short-videos/7/share"} {
 		for _, status := range []string{"draft", "archived", "published", "missing"} {

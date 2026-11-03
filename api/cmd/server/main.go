@@ -123,6 +123,7 @@ func main() {
 		priv.POST("/fishing/fire", fishingH.Fire)
 		priv.GET("/fishing/balance", fishingH.Balance)
 
+		priv.POST("/chat/direct", chatH.Direct)
 		priv.GET("/chat/rooms", chatH.MyRooms)
 		priv.GET("/chat/rooms/:id/messages", chatH.Messages)
 		priv.POST("/chat/rooms/:id/messages", chatH.Send)
