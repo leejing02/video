@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, inject, watch, type Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatApi } from '@/api/chat'
 import { WsClient } from '@/utils/ws'
@@ -15,6 +15,8 @@ const exhausted = ref<Record<number, boolean>>({})
 const query = ref('')
 const filter = ref('all')
 const mobileOpen = ref(false)
+const chatDetailOpen = inject<Ref<boolean>>('chatDetailOpen', ref(false))
+watch(mobileOpen, value => { chatDetailOpen.value = value }, { flush: 'sync' })
 const connected = ref(false)
 const loading = ref(false)
 const olderLoading = ref(false)
@@ -146,7 +148,7 @@ onMounted(async () => {
   refreshTimer = setInterval(() => { void recover() }, 15000)
   document.addEventListener('visibilitychange', onVisible)
 })
-onUnmounted(() => { disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible) })
+onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible) })
 </script>
 
 <template>
