@@ -12,7 +12,6 @@ const rooms = ref<ChatRoom[]>([])
 const selected = ref<number | null>(null)
 const cache = ref<Record<number, Message[]>>({})
 const exhausted = ref<Record<number, boolean>>({})
-const query = ref('')
 const filter = ref('all')
 const mobileOpen = ref(false)
 const chatDetailOpen = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
@@ -23,7 +22,6 @@ const olderLoading = ref(false)
 const error = ref('')
 const pending = ref<Record<number, boolean>>({})
 const scrollEl = ref<HTMLElement | null>(null)
-const searchInput = ref<HTMLInputElement | null>(null)
 const socket = new WsClient()
 const cleanups: (() => void)[] = []
 let refreshTimer: ReturnType<typeof setInterval>
@@ -31,7 +29,7 @@ let selectionVersion = 0
 let disposed = false
 const room = computed(() => rooms.value.find(item => item.id === selected.value))
 const messages = computed(() => selected.value === null ? [] : cache.value[selected.value] ?? [])
-const filtered = computed(() => rooms.value.filter(item => item.name.toLowerCase().includes(query.value.toLowerCase()) && (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
+const filtered = computed(() => rooms.value.filter(item => (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
 const totalUnread = computed(() => rooms.value.reduce((sum, item) => sum + item.unread_count, 0))
 
 function merge(id: number, incoming: Message[]) {
@@ -155,11 +153,10 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
   <div class="messenger" :class="{ 'conversation-open': mobileOpen }">
     <aside class="conversation-list">
       <header class="chat-list-header">
-        <button class="header-action" @click="searchInput?.focus()">搜索</button>
+        <div class="chat-connection" role="status"><i :class="{ online: connected }" aria-hidden="true"></i><span>{{ connected ? '实时消息已连接' : '实时消息连接中' }}</span></div>
         <div class="chat-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6 18-4-7-8-3Zm8 3L21 3" /></svg><h1>聊天</h1><span v-if="totalUnread" class="unread-total">{{ totalUnread > 99 ? '99+' : totalUnread }}</span></div>
         <button class="round-button" aria-label="刷新会话" @click="recover">↻</button>
       </header>
-      <div class="chat-search"><span>⌕</span><input ref="searchInput" v-model="query" placeholder="搜索会话" aria-label="搜索会话" /></div>
       <div class="conversation-filters"><button v-for="option in [{id:'all',name:'所有聊天'},{id:'group',name:'群组'},{id:'direct',name:'私聊'}]" :key="option.id" :class="{ selected: filter === option.id }" @click="filter = option.id">{{ option.name }}</button></div>
       <div v-if="error && !mobileOpen" class="chat-error" role="alert">{{ error }} <button @click="recover">刷新</button></div>
       <div class="conversation-items">
@@ -169,7 +166,6 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
         </button>
         <div v-if="!filtered.length" class="chat-placeholder"><span>✉</span><p>暂无{{ filter === 'direct' ? '私聊' : '会话' }}</p><small>在群聊中点击成员头像，即可发起私聊</small></div>
       </div>
-      <footer class="chat-list-footer"><i :class="{ online: connected }"></i>{{ connected ? '实时消息已连接' : '连接中，消息会自动同步' }}</footer>
     </aside>
     <section class="conversation-detail">
       <template v-if="room">
