@@ -19,6 +19,6 @@ function send() {
     <div v-if="emoji" class="emoji-tray"><button v-for="item in ['😀','😂','🥰','👍','❤️','🔥','🎉','🙏','👋','🤔','✨','💪']" :key="item" type="button" :aria-label="`插入 ${item}`" @click="text += item">{{ item }}</button></div>
     <button class="emoji-toggle" type="button" aria-label="表情" :aria-expanded="emoji" @click="emoji = !emoji">☺</button>
     <input v-model="text" aria-label="消息内容" placeholder="发送消息…" maxlength="2000" autocomplete="off" @compositionstart="composing = true" @compositionend="composing = false" />
-    <button class="send-button" type="submit" :disabled="isSending || busy || !text.trim()" aria-label="发送消息"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 16-8-5 16-4-6-7-2Zm7 2 9-10" /></svg></button>
+    <button class="send-button" type="submit" @pointerdown.prevent :disabled="isSending || busy || !text.trim()" aria-label="发送消息"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 16-8-5 16-4-6-7-2Zm7 2 9-10" /></svg></button>
   </form>
 </template>

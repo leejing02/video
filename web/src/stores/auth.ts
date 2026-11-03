@@ -26,6 +26,10 @@ export const useAuthStore = defineStore('auth', {
           if (raw) {
             try { this.user = JSON.parse(raw) } catch {}
           }
+        } else {
+          this.token = null
+          this.user = null
+          setToken(null)
         }
       } catch (e) {
         console.error('Init auth error', e)

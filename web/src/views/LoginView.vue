@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { postLoginPath } from '@/utils/mobile-shell'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -18,12 +19,13 @@ async function submit() {
   try {
     if (mode.value === 'login') {
       if (await auth.login(email.value, password.value)) {
-        const next = (router.currentRoute.value.query.next as string) || '/'
-        window.location.href = next
+        password.value = ''
+        await router.replace(postLoginPath(router.currentRoute.value.query.next))
       }
     } else {
       if (await auth.register(name.value, username.value, email.value, password.value)) {
-        window.location.href = '/'
+        password.value = ''
+        await router.replace('/chat')
       }
     }
   } catch (e: any) {

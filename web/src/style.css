@@ -4,8 +4,10 @@
 
 :root { --safe-top: env(safe-area-inset-top,0px); --safe-bottom: env(safe-area-inset-bottom,0px); color-scheme:dark; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
 html,body,#app { width:100%;height:100%;margin:0;padding:0;overflow:hidden;overscroll-behavior:none; }
-html {touch-action:pan-x pan-y;font-size:16px;-webkit-text-size-adjust:100%;}
-body {background:#080808;color:#fafafa;}
+html {touch-action:pan-y;font-size:16px;-webkit-text-size-adjust:100%;}
+body { position: fixed; inset: 0; background:#080808; color:#fafafa; }
+#app { position: fixed; top: var(--app-top,0px); left: 0; right: 0; width: 100%; height: var(--app-height,100dvh); }
+.message-timeline,.conversation-items { -webkit-overflow-scrolling: touch; }
 button,a {touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 button:focus-visible,a:focus-visible,input:focus-visible {outline:2px solid #ff754e;outline-offset:3px;}
 input,textarea,select {font-size:16px!important;min-width:0;}
@@ -63,8 +65,8 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .chat-list-footer { padding: 11px 18px; font-size: 11px; color: #929299; display: flex; align-items: center; gap: 7px; background: #f7f7fa; }
 .chat-list-footer i { width: 6px; height: 6px; background: #d1a45a; border-radius: 50%; }
 .chat-list-footer .online { background: #42b785; }
-.conversation-detail { display: flex; flex: 1; min-height: 0; min-width: 0; flex-direction: column; background-color: #eaf0f3; background-image: radial-gradient(#c1cfd64d .7px,transparent .7px); background-size: 23px 23px; }
-.conversation-header { display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: #f9f9fcf5; border-bottom: 1px solid #dcdfe4; min-height: 73px; flex-shrink: 0; }
+.conversation-detail { display: flex; flex: 1; min-height: 0; min-width: 0; flex-direction: column; background-color: #d8e9bf; background-image: radial-gradient(ellipse at top left,#f0efb9aa,transparent 65%), linear-gradient(140deg,#e4edbe,#a7d6b8); }
+.conversation-header { display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: #f9fff1cf; backdrop-filter: blur(18px); border-bottom: 1px solid #dcdfe4; min-height: 73px; flex-shrink: 0; }
 .header-avatar { width: 41px; height: 41px; font-size: 19px; }
 .conversation-header h2 { font-size: 16px; font-weight: 650; }
 .conversation-header p { font-size: 12px; color: #0088ef; margin-top: 3px; }
@@ -84,7 +86,7 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .message-bubble p { font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-meta { display: flex; justify-content: flex-end; gap: 5px; font-size: 10px; color: #96a0a6; margin-top: 3px; }
 .mine .message-meta { color: #74a65d; }
-.chat-composer { position: relative; display: flex; align-items: center; gap: 10px; padding: 11px 21px; background: #f7f7fa; border-top: 1px solid #dcdfe4; flex-shrink: 0; }
+.chat-composer { position: relative; display: flex; align-items: center; gap: 10px; padding: 11px 21px; background: #e5f0dfd9; backdrop-filter: blur(18px); border-top: 1px solid #c9d8c5; flex-shrink: 0; }
 .chat-composer input { flex: 1; background: #fff; border: 1px solid #dedee4; border-radius: 22px; padding: 10px 15px; color: #161616; }
 .chat-composer input::placeholder { color: #9898a0; }
 .emoji-toggle { font-size: 29px; color: #8d98a3; width: 30px; }
@@ -109,6 +111,10 @@ button {cursor:pointer;}button:disabled{cursor:default;}
   .conversation-open .conversation-list { display: none; }
   .conversation-open .conversation-detail { display: flex; }
   .chat-back { display: grid; font-size: 30px; background: none; width: 25px; }
+  .chat-mode:has(.conversation-open) .bottom-nav { display: none; }
+  .input-focused .chat-mode .bottom-nav { display: none; }
+  .conversation-open .chat-composer { padding-bottom: max(10px,var(--safe-bottom)); }
+  .input-focused .conversation-open .chat-composer { padding-bottom: 8px; }
   .conversation-header { padding: max(12px,var(--safe-top)) 13px 12px; }
   .message-timeline { padding: 20px 12px; }
   .chat-composer { padding: 10px; gap: 7px; }

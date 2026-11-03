@@ -46,6 +46,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  if (auth.isLoggedIn && to.name === 'login') return { path: '/chat', replace: true }
   if (!auth.isLoggedIn && !to.meta.public && to.name !== 'login') {
     return { name: 'login', query: { next: to.fullPath } }
   }
