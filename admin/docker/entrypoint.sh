@@ -42,6 +42,11 @@ php artisan package:discover --ansi || true
 # Filament 资源发布（首次）
 php artisan filament:upgrade || true
 
+# Uploads live in a persistent volume; recreate the public link on every boot.
+# --force repairs symlinks copied from a different build path, without deleting files.
+mkdir -p storage/app/public
+php artisan storage:link --force
+
 # 缓存（route:cache 与 Filament 闭包路由有兼容性问题，跳过）
 php artisan route:clear   || true
 php artisan config:cache  || true
