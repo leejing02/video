@@ -6,10 +6,10 @@ provide('mainNavigationHidden', navigationHidden)
 const route = useRoute()
 const router = useRouter()
 const tabs = [
-  { name: 'short', label: '首页' },
-  { name: 'long', label: '精选' },
+  { name: 'chat', label: '群聊' },
+  { name: 'short', label: '短视频' },
   { name: 'upload', label: '发布视频' },
-  { name: 'chat', label: '消息' },
+  { name: 'long', label: '长视频' },
   { name: 'me', label: '我' },
 ]
 function isActive(name: string) {
