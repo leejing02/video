@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { mediaUrl } from '@/utils/media-url'
 import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
 import { showToast } from '@/utils/toast'
@@ -135,13 +136,13 @@ onUnmounted(() => observer?.disconnect())
           v-if="isNear(idx)"
           :ref="el => syncVideo(el as HTMLVideoElement, idx)"
           :src="v.url"
-          :poster="v.cover || undefined"
+          :poster="mediaUrl(v.cover) || undefined"
           loop
           playsinline
           preload="metadata"
           class="h-full w-full object-cover bg-black"
         />
-        <img v-else-if="v.cover" :src="v.cover" class="h-full w-full object-cover bg-black" loading="lazy" />
+        <img v-else-if="v.cover" :src="mediaUrl(v.cover)" class="h-full w-full object-cover bg-black" loading="lazy" />
         <div v-else class="h-full w-full bg-gradient-to-br from-gray-900 to-black" />
 
         <!-- Action buttons -->

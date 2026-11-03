@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { mediaUrl } from '@/utils/media-url'
 import { videoApi } from '@/api/video'
 import type { Video, Comment } from '@/types/models'
 
@@ -47,7 +48,7 @@ onMounted(load)
 
     <!-- 整体可滚动区域：视频 + 信息 + 评论 -->
     <div class="flex-1 overflow-y-auto">
-      <video :src="video.url" controls autoplay class="w-full bg-black aspect-video" />
+      <video :poster="mediaUrl(video.cover) || undefined" :src="video.url" controls autoplay class="w-full bg-black aspect-video" />
 
       <div class="px-4 py-3 border-b border-gray-200">
         <h2 class="font-semibold">{{ video.title }}</h2>
