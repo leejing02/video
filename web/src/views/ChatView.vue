@@ -156,7 +156,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
     <aside class="conversation-list">
       <header class="chat-list-header">
         <div class="chat-connection" role="status"><i :class="{ online: connected }" aria-hidden="true"></i><span>{{ connected ? '实时消息已连接' : '实时消息连接中' }}</span></div>
-        <div class="chat-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6 18-4-7-8-3Zm8 3L21 3" /></svg><h1>聊天</h1><span v-if="totalUnread" class="unread-total">{{ totalUnread > 99 ? '99+' : totalUnread }}</span></div>
+        <div class="chat-heading"><h1>聊天</h1><span v-if="totalUnread" class="unread-total">{{ totalUnread > 99 ? '99+' : totalUnread }}</span></div>
         <button class="round-button" aria-label="刷新会话" @click="recover">↻</button>
       </header>
       <div class="chat-search"><span aria-hidden="true">⌕</span><input v-model="query" placeholder="搜索会话" aria-label="搜索会话" type="search" /></div>

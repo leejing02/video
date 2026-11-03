@@ -26,7 +26,6 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .conversation-list { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: #fff; border-right: 1px solid #dedee3; }
 .chat-list-header { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; padding: max(18px,var(--safe-top)) 16px 14px; min-height: 65px; background: #f7f7fa; }
 .chat-heading { display: flex; align-items: center; gap: 6px; }
-.chat-heading svg { width: 21px; height: 21px; fill: none; stroke: #0088ef; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .chat-list-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -.4px; }
 .unread-total { min-width: 20px; padding: 1px 5px; border-radius: 12px; background: #0088ef; color: white; text-align: center; font-size: 11px; }
 .round-button { width: 36px; height: 36px; border-radius: 50%; color: #0088ef; font-size: 26px; display: grid; place-items: center; }
