@@ -199,7 +199,7 @@ services:
         condition: service_healthy
     volumes:
       - admin_storage:/var/www/html/storage
-      - ./deploy/efv-media:/etc/video/efv-media:ro
+      - ./deploy/efv-media:/etc/video/efv-media
     expose:
       - "80"
     healthcheck:

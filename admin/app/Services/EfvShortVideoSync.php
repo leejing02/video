@@ -97,7 +97,7 @@ class EfvShortVideoSync
             $this->mediaUrl($endpoint, $movie['poster'] ?? null),
             $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
         ])));
-        $imageOrigin = $this->imageOrigin();
+        $imageOrigin = app(EfvMediaDomains::class)->read()['image_origin'];
         $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
         $cover = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
@@ -141,20 +141,6 @@ class EfvShortVideoSync
         return $replaceCover && !$cover
             ? $coverFailure
             : null;
-    }
-
-    private function imageOrigin(): ?string
-    {
-        $json = @file_get_contents('/etc/video/efv-media/domains.json');
-        $origin = $json === false ? null : (json_decode($json, true)['image_origin'] ?? null);
-        $parts = is_string($origin) ? parse_url($origin) : [];
-        if (($parts['scheme'] ?? null) !== 'https' || empty($parts['host']) || isset($parts['user'])
-            || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
-            || !in_array($parts['path'] ?? '', ['', '/'], true)) {
-            return null;
-        }
-
-        return rtrim($origin, '/');
     }
 
     private function coverSource(string $endpoint, string $url, ?string $imageOrigin): ?string

@@ -65,4 +65,10 @@ mkdir -p /var/lib/nginx/tmp/fastcgi
 chown -R www-data:www-data /var/lib/nginx
 chmod -R u+rwX /var/lib/nginx
 
+# The admin writes the bind-mounted domain file by atomic rename.
+if [ -f /etc/video/efv-media/domains.json ]; then
+    chown www-data:www-data /etc/video/efv-media
+    chmod u+rwx,go+rx /etc/video/efv-media
+fi
+
 exec "$@"
