@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { ObjectDirective } from 'vue'
 import type Hls from 'hls.js'
 import { mediaUrl } from '@/utils/media-url'
+import { vEfvCoverBlob } from '@/utils/efv-cover-blob'
 import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
 import { showToast } from '@/utils/toast'
@@ -296,13 +297,13 @@ onUnmounted(() => observer?.disconnect())
           @pause="updatePlayback($event, idx)"
           @ended="updatePlayback($event, idx)"
           @error="mediaFailed"
-          :poster="mediaUrl(v.cover) || undefined"
+          v-efv-cover-blob:poster="mediaUrl(v.cover)"
           loop
           playsinline
           preload="metadata"
           class="h-full w-full object-cover bg-black"
         />
-        <img v-else-if="v.cover" :src="mediaUrl(v.cover)" class="h-full w-full object-cover bg-black" loading="lazy" />
+        <img v-else-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" class="h-full w-full object-cover bg-black" loading="lazy" />
         <div v-else class="h-full w-full bg-gradient-to-br from-gray-900 to-black" />
 
         <template v-if="idx === currentIdx">
