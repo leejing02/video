@@ -9,6 +9,8 @@ use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,9 +30,97 @@ class EfvGalleryUploadController extends Controller
             'order' => ['required', 'integer', 'between:0,99'],
             'file' => ['required', 'file', 'max:46080'],
         ]);
+        return $this->submit($data, $request->file('file'), $admin->getKey());
+    }
+
+    public function chunk(Request $request): JsonResponse
+    {
+        $admin = $request->user('admin');
+        abort_unless($admin && $admin->is_active, 403);
+        Gate::forUser($admin)->authorize('uploadGallery', Video::class);
+
+        $data = $request->validate([
+            'batch' => ['required', 'uuid'],
+            'category' => ['required', 'integer'],
+            'order' => ['required', 'integer', 'between:0,99'],
+            'name' => ['required', 'string', 'max:255'],
+            'size' => ['required', 'integer', 'between:1,47185920'],
+            'offset' => ['required', 'integer', 'min:0'],
+            'chunk' => ['required', 'file', 'max:512'],
+        ]);
+        $size = (int) $data['size'];
+        $offset = (int) $data['offset'];
+        $chunk = $request->file('chunk');
+        abort_unless($chunk->getSize() === min(524288, $size - $offset)
+            && $offset % 524288 === 0 && $offset < $size, 422, '分片大小或位置不正确');
+
+        // Keep at most one partial file per administrator, outside public storage.
+        $adminId = $admin->getKey();
+        $key = 'efv-upload-chunk:'.$adminId;
+        $path = storage_path('app/efv-upload/'.$adminId.'.part');
+        $identity = [$data['batch'], $data['category'], $data['order'], $data['name'], $size];
+        $lock = Cache::lock($key.':lock', 70);
+        abort_unless($lock->get(), 409, '当前有分片正在处理，请稍后重试');
+
+        try {
+            $state = Cache::get($key);
+            if (($state['identity'] ?? null) !== $identity) {
+                if ($offset !== 0) {
+                    return response()->json(['next_offset' => 0]);
+                }
+                File::ensureDirectoryExists(dirname($path), 0700);
+                abort_if(file_put_contents($path, '') === false, 500, '无法创建上传临时文件');
+                $state = ['identity' => $identity];
+                Cache::put($key, $state, now()->addDay());
+            }
+            if (isset($state['result'])) {
+                return response()->json($state['result']);
+            }
+
+            clearstatcache(true, $path);
+            $received = is_file($path) ? filesize($path) : 0;
+            if ($received !== $size) {
+                $boundary = $received - $received % 524288;
+                if ($boundary !== $offset) {
+                    return response()->json(['next_offset' => $boundary]);
+                }
+            }
+            if ($received !== $size) {
+                $stream = fopen($path, 'c+b');
+                abort_unless($stream, 500, '无法打开上传临时文件');
+                try {
+                    $bytes = file_get_contents($chunk->getPathname());
+                    abort_unless($bytes !== false && fseek($stream, $offset) === 0, 500, '无法读取上传分片');
+                    if (fwrite($stream, $bytes) !== strlen($bytes)) {
+                        ftruncate($stream, $offset);
+                        abort(500, '保存分片失败，请检查后台磁盘空间');
+                    }
+                } finally {
+                    fclose($stream);
+                }
+                $received = $offset + strlen($bytes);
+            }
+
+            if ($received < $size) {
+                return response()->json(['next_offset' => $received]);
+            }
+
+            $file = new UploadedFile($path, $data['name'], null, null, true);
+            $result = $this->submit($data, $file, $adminId)->getData(true);
+            $state['result'] = $result;
+            Cache::put($key, $state, now()->addDay());
+            File::delete($path);
+
+            return response()->json($result);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function submit(array $data, UploadedFile $file, int $adminId): JsonResponse
+    {
         $category = Category::query()->where('type', Category::TYPE_SHORT)
             ->where('is_active', true)->findOrFail($data['category']);
-        $file = $request->file('file');
         $extension = strtolower($file->getClientOriginalExtension());
         $image = in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true);
         if ($image) {
@@ -60,12 +150,12 @@ class EfvGalleryUploadController extends Controller
         $stage = '创建合集';
         try {
             $batches->insertOrIgnore([
-                'id' => $batch, 'admin_id' => $admin->getKey(),
+                'id' => $batch, 'admin_id' => $adminId,
                 'category_id' => $category->getKey(), 'section' => $category->efv_section,
                 'created_at' => now(),
             ]);
             $record = $batches->where('id', $batch)->first();
-            abort_unless($record && (int) $record->admin_id === (int) $admin->getKey(), 403);
+            abort_unless($record && (int) $record->admin_id === $adminId, 403);
             abort_unless((int) $record->category_id === (int) $category->getKey(), 409, '该批次已锁定分类');
             $section = $record->section;
             abort_unless(in_array($section, ['gallery', 'chigua'], true), 422, 'EFV 栏目设置无效');
