@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ShortVideoResource\Pages;
 use App\Filament\Resources\ShortVideoResource;
 use App\Models\Category;
 use App\Models\Video;
+use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 use Filament\Resources\Pages\Page;
 
@@ -31,6 +32,8 @@ class UploadGallery extends Page
     protected function getViewData(): array
     {
         return ['categories' => Category::query()->where('type', Category::TYPE_SHORT)
-            ->where('is_active', true)->orderBy('sort')->get(['id', 'name', 'efv_section'])];
+            ->where('is_active', true)->orderBy('sort')->get(['id', 'name', 'efv_section']),
+            'uploaders' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'username']),
+        ];
     }
 }

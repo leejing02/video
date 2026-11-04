@@ -104,8 +104,8 @@ class ShortVideoResource extends VideoResource
                         'success' => Video::STATUS_PUBLISHED,
                         'danger'  => Video::STATUS_ARCHIVED,
                     ])
-                    ->formatStateUsing(fn ($state) => match ($state) {
-                        Video::STATUS_DRAFT     => '草稿',
+                    ->formatStateUsing(fn ($state, Video $record) => match ($state) {
+                        Video::STATUS_DRAFT     => blank($record->url) ? '待补播放地址' : '草稿',
                         Video::STATUS_PUBLISHED => '已发布',
                         Video::STATUS_ARCHIVED  => '已下架',
                     }),
@@ -135,6 +135,7 @@ class ShortVideoResource extends VideoResource
                 Tables\Actions\Action::make('preview')
                     ->label('预览')
                     ->icon('heroicon-o-play')
+                    ->visible(fn (Video $record) => filled($record->url))
                     ->url(fn (Video $r) => $r->url, shouldOpenInNewTab: true),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
@@ -144,7 +145,14 @@ class ShortVideoResource extends VideoResource
                     Tables\Actions\DeleteBulkAction::make(),
                     Tables\Actions\BulkAction::make('publish')
                         ->label('批量发布')->icon('heroicon-o-check')
-                        ->action(fn ($records) => $records->each->update(['status' => Video::STATUS_PUBLISHED])),
+                        ->action(function ($records) {
+                            $ready = $records->filter(fn (Video $record) => filled($record->url));
+                            $ready->each->update(['status' => Video::STATUS_PUBLISHED]);
+                            if ($ready->count() < $records->count()) {
+                                \Filament\Notifications\Notification::make()
+                                    ->warning()->title('缺少播放地址的视频仍保留为草稿')->send();
+                            }
+                        }),
                     Tables\Actions\BulkAction::make('archive')
                         ->label('批量下架')->icon('heroicon-o-archive-box')
                         ->action(fn ($records) => $records->each->update(['status' => Video::STATUS_ARCHIVED])),

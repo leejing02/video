@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Video;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +40,10 @@ class EfvGalleryUploadController extends Controller
         } else {
             abort_unless(in_array($extension, ['mp4', 'mkv', 'avi', 'dat', 'mpg', 'rmvb', 'rm', 'flv', 'mpeg', 'mov', 'wmv', 'vob', 'asf', 'ts'], true), 422, '不支持此视频格式');
         }
+
+        $uploader = $image ? null : $request->validate([
+            'user_id' => ['required', 'integer', Rule::exists('users', 'id')->where('is_active', true)],
+        ])['user_id'];
 
         $config = config('services.efv');
         $base = rtrim($config['endpoint'], '/');
@@ -100,16 +106,30 @@ class EfvGalleryUploadController extends Controller
 
             abort_unless($response->successful() && $response->json('success'), 502, 'EFV 未接受文件（HTTP '.$response->status().'）');
             $files = json_decode($record->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
-            $files[$data['order']] = [
-                'name' => $file->getClientOriginalName(),
-                'status' => $image ? '图片已加入图集' : '视频已提交转码',
-            ];
-            ksort($files);
-            $batches->where('id', $batch)->update([
-                'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
-            ]);
+            $entry = $files[$data['order']] ?? [];
+            DB::transaction(function () use (&$entry, $files, $data, $batches, $batch, $image, $file, $uploader, $category) {
+                $entry['name'] = $file->getClientOriginalName();
+                $entry['status'] = $image ? '图片已加入图集' : '视频已提交转码，已创建本地草稿';
+                if (!$image && empty($entry['video_id'])) {
+                    $title = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                    $video = Video::create([
+                        'user_id' => $uploader,
+                        'category_id' => $category->getKey(),
+                        'type' => Video::TYPE_SHORT,
+                        'title' => Str::limit($title ?: '未命名短视频', 150, ''),
+                        'url' => '',
+                        'status' => Video::STATUS_DRAFT,
+                    ]);
+                    $entry['video_id'] = $video->getKey();
+                }
+                $files[$data['order']] = $entry;
+                ksort($files);
+                $batches->where('id', $batch)->update([
+                    'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
+                ]);
+            });
 
-            return response()->json(['message' => $files[$data['order']]['status']]);
+            return response()->json(['message' => $entry['status'], 'video_id' => $entry['video_id'] ?? null]);
         } catch (ConnectionException) {
             abort(502, '连接 EFV 超时或失败，可重试当前文件');
         } finally {
