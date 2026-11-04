@@ -36,6 +36,9 @@ const selected = ref<number | null>(null)
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
 const pendingEntryCovers = ref(new Set<number>())
+const displayedGrid = ref(0)
+const retryAppend = ref(false)
+const staged = ref<{ key: number; items: (ShortVideo | Video)[]; coverIds: Set<number>; more: boolean }>()
 let disposed = false
 let entryCoverTimeout: ReturnType<typeof setTimeout> | undefined
 const query = ref('')
@@ -67,19 +70,49 @@ watch(nextPageMarker, (marker, _, onCleanup) => {
   onCleanup(() => observer.disconnect())
 }, { flush: 'post' })
 let generation = 0
-const visible = computed(() => videos.value.filter(v => `${v.title} ${v.user?.name ?? ''} ${v.user?.username ?? ''}`.toLowerCase().includes(query.value.trim().toLowerCase())))
-const waitingForEntryCovers = computed(() => visible.value.some(video => pendingEntryCovers.value.has(video.id)))
+function filterVideos(items: (ShortVideo | Video)[]) {
+  const search = query.value.trim().toLowerCase()
+  return items.filter(v => `${v.title} ${v.user?.name ?? ''} ${v.user?.username ?? ''}`.toLowerCase().includes(search))
+}
+const visible = computed(() => filterVideos(videos.value))
+const grids = computed(() => {
+  const current = { key: displayedGrid.value, items: visible.value, coverIds: eagerCoverIds.value, hidden: false }
+  const incoming = staged.value
+  if (!incoming) return [current]
+  return [current, { ...incoming, items: filterVideos(incoming.items), hidden: true }]
+})
+function showStagedGrid() {
+  const incoming = staged.value
+  if (!incoming || incoming.key !== generation) return
+  clearTimeout(entryCoverTimeout)
+  videos.value = incoming.items
+  eagerCoverIds.value = incoming.coverIds
+  displayedGrid.value = incoming.key
+  page.value = 1
+  more.value = incoming.more
+  staged.value = undefined
+  pendingEntryCovers.value.clear()
+  loading.value = false
+  if (scrollArea.value) scrollArea.value.scrollTop = 0
+}
+function coverSettled(grid: number, id: number) {
+  if (staged.value?.key !== grid) return
+  pendingEntryCovers.value.delete(id)
+  if (!pendingEntryCovers.value.size) showStagedGrid()
+}
 async function load(append = false) {
   const request = ++generation
+  retryAppend.value = props.kind === "short" && append
   loading.value = true
   error.value = ''
   if (!append) {
-    videos.value = []
-    eagerCoverIds.value.clear()
+    staged.value = undefined
     pendingEntryCovers.value.clear()
     clearTimeout(entryCoverTimeout)
-    more.value = false
-    if (props.kind === 'short' && scrollArea.value) scrollArea.value.scrollTop = 0
+    if (props.kind === 'long') {
+      videos.value = []
+      more.value = false
+    }
   }
   const nextPage = append ? page.value + 1 : 1
   try {
@@ -91,21 +124,36 @@ async function load(append = false) {
         : shortVideoApi.list(params))
     if (request !== generation) return
     const items = result.data ?? []
+    const count = items.length + (append ? videos.value.length : 0)
+    const hasMore = result.meta ? nextPage < result.meta.last_page : result.total !== undefined ? count < result.total : items.length === 30
     if (props.kind === 'short') {
-      const coverIds = items.filter(video => mediaUrl(video.cover)).slice(0, 6).map(video => video.id)
-      for (const id of coverIds) eagerCoverIds.value.add(id)
-      if (!append && coverIds.length) {
-        pendingEntryCovers.value = new Set(coverIds)
-        entryCoverTimeout = setTimeout(() => pendingEntryCovers.value.clear(), 5000)
+      const coverIds = new Set(items.filter(video => mediaUrl(video.cover)).slice(0, 6).map(video => video.id))
+      if (!append) {
+        staged.value = { key: request, items, coverIds, more: hasMore }
+        pendingEntryCovers.value = new Set(filterVideos(items).filter(video => coverIds.has(video.id)).map(video => video.id))
+        if (pendingEntryCovers.value.size) {
+          entryCoverTimeout = setTimeout(() => {
+            if (!visible.value.length) {
+              showStagedGrid()
+              return
+            }
+            staged.value = undefined
+            pendingEntryCovers.value.clear()
+            loading.value = false
+            error.value = '分类封面加载超时，请重试'
+          }, 5000)
+        } else showStagedGrid()
+        return
       }
+      for (const id of coverIds) eagerCoverIds.value.add(id)
     }
     videos.value = append ? [...videos.value, ...items] : items
     page.value = nextPage
-    more.value = result.meta ? nextPage < result.meta.last_page : result.total !== undefined ? videos.value.length < result.total : items.length === 30
+    more.value = hasMore
   } catch {
     if (request === generation) error.value = '视频加载失败，请重试'
   } finally {
-    if (request === generation) loading.value = false
+    if (request === generation && !staged.value) loading.value = false
   }
 }
 function open(video: ShortVideo | Video) {
@@ -146,12 +194,14 @@ onMounted(() => {
     <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
     <div ref="scrollArea" class="discovery-scroll">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <div v-else class="video-grid" :aria-busy="loading || waitingForEntryCovers" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { invisible: waitingForEntryCovers }]">
-        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="eagerCoverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="pendingEntryCovers.delete(video.id)" @click="open(video)" />
+      <div v-else class="relative">
+        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden }]">
+          <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video)" />
+        </div>
       </div>
-      <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(kind === 'short' && videos.length > 0)">重新加载</button></div>
+      <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
-      <div v-if="kind === 'short' && autoLoad && more && !error && !query && !waitingForEntryCovers && playerIndex === null">
+      <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
         <p v-if="loading" class="sr-only" role="status">加载中…</p>
         <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
       </div>
