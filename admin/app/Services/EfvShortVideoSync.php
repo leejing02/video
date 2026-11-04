@@ -18,21 +18,44 @@ class EfvShortVideoSync
             return null;
         }
 
-        foreach (DB::table('efv_gallery_batches')->whereNotNull('group_id')->whereNotNull('files')->cursor() as $batch) {
-            foreach (json_decode($batch->files, true) ?? [] as $order => $entry) {
-                if ((string) ($entry['video_id'] ?? '') === (string) $video->getKey()) {
-                    $id = $entry['efv_id'] ?? substr(hash('sha256', $batch->group_id.':'.$order), 0, 24);
-                    return preg_match('/^[a-f0-9]{24}$/iD', $id) ? $id : null;
-                }
+        foreach ($this->linkedMovies() as $videoId => $movieId) {
+            if ($videoId === (int) $video->getKey()) {
+                return $movieId;
             }
         }
 
         return null;
     }
 
+    public function linkedMovies(): iterable
+    {
+        foreach (DB::table('efv_gallery_batches')->whereNotNull('group_id')->whereNotNull('files')->cursor() as $batch) {
+            foreach (json_decode($batch->files, true) ?? [] as $order => $entry) {
+                $videoId = (int) ($entry['video_id'] ?? 0);
+                $id = $entry['efv_id'] ?? substr(hash('sha256', $batch->group_id.':'.$order), 0, 24);
+                if ($videoId > 0 && is_string($id) && preg_match('/^[a-f0-9]{24}$/iD', $id)) {
+                    yield $videoId => $id;
+                }
+            }
+        }
+    }
+
     public function publish(Video $video): ?string
     {
-        $id = $this->movieId($video);
+        return $this->sync($video, $this->movieId($video));
+    }
+
+    public function needsAutomaticSync(Video $video): bool
+    {
+        return $video->type === Video::TYPE_SHORT && (
+            ($video->status === Video::STATUS_DRAFT && blank($video->url))
+            || ($video->status === Video::STATUS_PUBLISHED
+                && (blank($video->cover) || str_starts_with((string) $video->cover, 'https://')))
+        );
+    }
+
+    public function sync(Video $video, ?string $id, bool $automatic = false): ?string
+    {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $key = config('services.efv.api_key');
 
@@ -70,11 +93,16 @@ class EfvShortVideoSync
         ])));
         $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
         $cover = null;
+        $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
             foreach ($covers as $candidate) {
-                $cover = $this->storeCover($endpoint, $candidate);
-                if ($cover) {
-                    break;
+                try {
+                    $cover = $this->storeCover($endpoint, $candidate);
+                    if ($cover) {
+                        break;
+                    }
+                } catch (DomainException $exception) {
+                    $coverFailure = $exception->getMessage();
                 }
             }
         }
@@ -86,10 +114,14 @@ class EfvShortVideoSync
             $duration = (int) ceil((float) $time);
         }
 
-        DB::transaction(function () use ($video, $url, $cover, $covers, $duration) {
+        DB::transaction(function () use ($video, $url, $cover, $covers, $duration, $automatic) {
             $record = $video->newQuery()->lockForUpdate()->findOrFail($video->getKey());
+            if ($automatic && !$this->needsAutomaticSync($record)) {
+                return;
+            }
+
             $record->update([
-                'url' => $url,
+                'url' => $automatic && filled($record->url) ? $record->url : $url,
                 'cover' => $cover && (!$record->cover || in_array($record->cover, $covers, true)) ? $cover : $record->cover,
                 'duration' => $duration ?: $record->duration,
                 'status' => Video::STATUS_PUBLISHED,
@@ -99,7 +131,7 @@ class EfvShortVideoSync
         $video->refresh();
 
         return $replaceCover && !$cover
-            ? '视频已发布，封面同步失败。请检查 EFV 图片加密配置和封面地址后重试。'
+            ? $coverFailure
             : null;
     }
 
@@ -148,7 +180,7 @@ class EfvShortVideoSync
             $lengths = ['aes-128-ctr' => 32, 'aes-128-cbc' => 32, 'aes-256-ctr' => 64, 'aes-256-cbc' => 64];
             if (!isset($lengths[$cipher]) || strlen($key) !== $lengths[$cipher]
                 || strlen($iv) !== 32 || !ctype_xdigit($key.$iv)) {
-                return null;
+                throw new DomainException('EFV 封面已加密，请检查 EFV_IMAGE_AES_KEY、EFV_IMAGE_AES_IV 和算法配置。');
             }
             $bytes = openssl_decrypt($bytes, $cipher, hex2bin($key), OPENSSL_RAW_DATA, hex2bin($iv));
         }
@@ -162,7 +194,7 @@ class EfvShortVideoSync
             default => null,
         };
         if (!$extension) {
-            return null;
+            throw new DomainException('EFV 封面内容无效，请核对图片加密密钥、IV 和算法。');
         }
 
         $path = 'shorts/covers/efv-'.hash('sha256', $bytes).'.'.$extension;
