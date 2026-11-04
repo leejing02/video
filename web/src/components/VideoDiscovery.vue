@@ -51,7 +51,7 @@ watch(nextPageMarker, (marker, _, onCleanup) => {
     if (nextPageMarker.value === marker && !loading.value && !error.value && entries.some(entry => entry.isIntersecting)) {
       void load(true)
     }
-  }, { root: scrollArea.value, rootMargin: '0px 0px 320px' })
+  }, { root: scrollArea.value, rootMargin: '0px 0px 1200px' })
   observer.observe(marker)
   onCleanup(() => observer.disconnect())
 }, { flush: 'post' })
@@ -117,7 +117,7 @@ onMounted(() => {
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(kind === 'short' && videos.length > 0)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
       <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
-        <p v-if="loading" class="feed-more text-center" role="status">加载中…</p>
+        <p v-if="loading" class="sr-only" role="status">加载中…</p>
         <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
       </div>
       <button v-else-if="(kind === 'long' || !autoLoad) && more && !error && !query" class="feed-more" :disabled="loading" @click="load(true)">{{ loading ? '加载中…' : '加载更多' }}</button>

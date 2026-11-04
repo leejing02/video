@@ -47,9 +47,10 @@ function setCover(el: HTMLElement, value: string, poster: boolean) {
   }
 
   if (!poster && typeof IntersectionObserver !== 'undefined') {
+    const feed = el.closest('.short-masonry')?.closest('.discovery-scroll')
     request.observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void load()
-    }, { rootMargin: '200px' })
+    }, { root: feed ?? null, rootMargin: feed ? '200px 0px 800px' : '200px' })
     request.observer.observe(el)
   } else {
     void load()
