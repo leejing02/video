@@ -32,6 +32,7 @@ const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false)
 const categories = ref<(Category | ShortCategory)[]>([])
 const selected = ref<number | null>(null)
 const videos = ref<(ShortVideo | Video)[]>([])
+const eagerCoverIds = ref(new Set<number>())
 const query = ref('')
 const searching = ref(false)
 const loading = ref(false)
@@ -63,6 +64,7 @@ async function load(append = false) {
   error.value = ''
   if (!append) {
     videos.value = []
+    eagerCoverIds.value.clear()
     more.value = false
     if (props.kind === 'short' && scrollArea.value) scrollArea.value.scrollTop = 0
   }
@@ -72,6 +74,11 @@ async function load(append = false) {
     const result = props.kind === 'short' ? await shortVideoApi.list(params) : await videoApi.list({ ...params, type: 'long' })
     if (request !== generation) return
     const items = result.data ?? []
+    if (props.kind === 'short') {
+      for (const video of items.filter(video => video.cover?.trim()).slice(0, 6)) {
+        eagerCoverIds.value.add(video.id)
+      }
+    }
     videos.value = append ? [...videos.value, ...items] : items
     page.value = nextPage
     more.value = result.meta ? nextPage < result.meta.last_page : result.total !== undefined ? videos.value.length < result.total : items.length === 30
@@ -112,7 +119,7 @@ onMounted(() => {
     <div ref="scrollArea" class="discovery-scroll">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
       <div v-else class="video-grid" :aria-busy="loading" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
-        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
+        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="eagerCoverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
       </div>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(kind === 'short' && videos.length > 0)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
