@@ -173,7 +173,11 @@ class EfvShortVideoSync
         if (!$bytes || strlen($bytes) > 5 * 1024 * 1024) {
             return null;
         }
-        if (strtolower($response->header('X-Encode-Mode')) === 'aes') {
+        $mode = strtolower(trim($response->header('X-Encode-Mode')));
+        if ($mode === 'xor') {
+            $length = min(9, strlen($bytes));
+            $bytes = (substr($bytes, 0, $length) ^ str_repeat(chr(0x12), $length)).substr($bytes, $length);
+        } elseif ($mode === 'aes') {
             $cipher = config('services.efv.image_aes_cipher');
             $key = (string) config('services.efv.image_aes_key');
             $iv = (string) config('services.efv.image_aes_iv');
@@ -194,7 +198,7 @@ class EfvShortVideoSync
             default => null,
         };
         if (!$extension) {
-            throw new DomainException('EFV 封面内容无效，请核对图片加密密钥、IV 和算法。');
+            throw new DomainException('EFV 封面内容无效，请检查图片响应和加密设置。');
         }
 
         $path = 'shorts/covers/efv-'.hash('sha256', $bytes).'.'.$extension;
