@@ -95,22 +95,22 @@ button {cursor:pointer;}button:disabled{cursor:default;}
   .messenger { position: relative; overflow: hidden; }
   .conversation-list { width: 100%; border: 0; }
   .conversation-detail { display: none; }
-  .conversation-open .conversation-list { pointer-events: none; }
+  .conversation-open .conversation-list {
+    pointer-events: none;
+    transform: translateX(calc(var(--chat-swipe-offset, 0px) - 100%));
+  }
   .conversation-open .conversation-detail {
     display: flex;
     position: absolute;
     inset: 0;
     z-index: 1;
     transform: translateX(var(--chat-swipe-offset, 0px));
-    transition: transform 220ms ease-out;
   }
-  .conversation-open .conversation-detail.swipe-dragging { transition: none; }
-  .conversation-open .conversation-detail.swipe-closing { transform: translateX(100%); }
-  .conversation-open .conversation-detail.swipe-revealing {
-    border-radius: 24px 0 0 24px;
-    overflow: hidden;
-    box-shadow: -8px 0 24px #0002;
+  .conversation-open:not(.swipe-dragging) :is(.conversation-list, .conversation-detail) {
+    transition: transform 220ms cubic-bezier(.2,.75,.25,1);
   }
+  .conversation-open.swipe-closing .conversation-list { transform: translateX(0); }
+  .conversation-open.swipe-closing .conversation-detail { transform: translateX(100%); }
   .chat-back { display: grid; font-size: 30px; background: none; width: 25px; }
   .input-focused .chat-mode .bottom-nav { display: none; }
   .conversation-open .chat-composer { padding-bottom: max(10px,var(--safe-bottom)); }

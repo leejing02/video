@@ -77,19 +77,26 @@ function moveBackSwipe(event: TouchEvent) {
   } else if (swipeDragging.value || (dx > 8 && dx > dy)) {
     if (event.cancelable) event.preventDefault()
     swipeDragging.value = true
-    swipeOffset.value = Math.max(0, dx)
+    swipeOffset.value = Math.max(0, Math.min(dx, window.innerWidth))
   }
 }
 
 function endBackSwipe(event: TouchEvent) {
   const start = backSwipe
-  cancelBackSwipe()
+  backSwipe = undefined
+  swipeDragging.value = false
   if (!start) return
   const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id)
-  if (!touch) return
+  if (!touch) {
+    cancelBackSwipe()
+    return
+  }
   const dx = touch.clientX - start.x
   const dy = Math.abs(touch.clientY - start.y)
-  if (dx < 64 || dx <= dy * 1.5) return
+  if (dx < 64 || dx <= dy * 1.5) {
+    cancelBackSwipe()
+    return
+  }
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     returnToConversations()
     return
@@ -216,7 +223,7 @@ onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disp
 </script>
 
 <template>
-  <div class="messenger" :class="{ 'conversation-open': mobileOpen }">
+  <div class="messenger" :class="{ 'conversation-open': mobileOpen, 'swipe-dragging': swipeDragging, 'swipe-closing': swipeClosing }" :style="{ '--chat-swipe-offset': swipeOffset + 'px' }">
     <aside class="conversation-list">
       <header class="chat-list-header">
         <div class="chat-connection" role="status"><i :class="{ online: connected }" aria-hidden="true"></i><span>{{ connected ? '实时消息已连接' : '实时消息连接中' }}</span></div>
@@ -234,7 +241,7 @@ onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disp
         <div v-if="!filtered.length" class="chat-placeholder"><span>✉</span><p>暂无{{ filter === 'direct' ? '私聊' : '会话' }}</p><small>在群聊中点击成员头像，即可发起私聊</small></div>
       </div>
     </aside>
-    <section class="conversation-detail" :class="{ 'swipe-dragging': swipeDragging, 'swipe-closing': swipeClosing, 'swipe-revealing': swipeOffset > 0 || swipeClosing }" :style="{ '--chat-swipe-offset': swipeOffset + 'px' }" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
+    <section class="conversation-detail" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
       <template v-if="room">
         <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="returnToConversations">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
         <div v-if="error" class="chat-error" role="alert">{{ error }}<button @click="error = ''">关闭</button></div>
