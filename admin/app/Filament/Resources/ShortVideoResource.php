@@ -158,6 +158,7 @@ class ShortVideoResource extends VideoResource
         return [
             'index'  => Pages\ListShortVideos::route('/'),
             'create' => Pages\CreateShortVideo::route('/create'),
+            'upload-gallery' => Pages\UploadGallery::route('/upload-gallery'),
             'edit'   => Pages\EditShortVideo::route('/{record}/edit'),
         ];
     }

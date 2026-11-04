@@ -166,6 +166,10 @@ services:
       APP_DEBUG: "false"
       APP_KEY: "${APP_KEY}"
       APP_URL: "https://${ADMIN_DOMAIN}"
+      EFV_ENDPOINT: "${EFV_ENDPOINT:-https://houtai.houtai2026.top}"
+      EFV_UPLOAD_KEY: "${EFV_UPLOAD_KEY:-}"
+      EFV_API_KEY: "${EFV_API_KEY:-}"
+      EFV_API_SECRET: "${EFV_API_SECRET:-}"
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: "3306"

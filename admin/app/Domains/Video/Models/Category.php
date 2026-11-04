@@ -44,6 +44,7 @@ class Category extends Model
         'parent_id',
         'icon',
         'cover',
+        'efv_section',
         'description',
         'sort',
         'is_active',

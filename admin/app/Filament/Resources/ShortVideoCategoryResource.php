@@ -54,6 +54,10 @@ class ShortVideoCategoryResource extends CategoryResource
                     ->placeholder('face.smiling'),
                 Forms\Components\Toggle::make('is_active')->label('启用')->default(true),
             ]),
+            Forms\Components\Select::make('efv_section')
+                ->label('EFV 栏目')
+                ->options(['gallery' => '图集', 'chigua' => '吃瓜'])
+                ->default('gallery')->required()->in(['gallery', 'chigua']),
             Forms\Components\FileUpload::make('cover')
                 ->label('封面图')
                 ->image()

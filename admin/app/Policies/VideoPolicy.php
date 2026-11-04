@@ -35,6 +35,11 @@ class VideoPolicy
         return $user->canAny(['long_video.create', 'short_video.create']);
     }
 
+    public function uploadGallery(AdminUser $user): bool
+    {
+        return $user->can('short_video.create');
+    }
+
     public function update(AdminUser $user, Video $r): bool
     {
         return $user->can($this->permFor($r, 'update'));

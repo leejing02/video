@@ -14,6 +14,13 @@ return [
     |
     */
 
+    'efv' => [
+        'endpoint' => env('EFV_ENDPOINT', 'https://houtai.houtai2026.top'),
+        'upload_key' => env('EFV_UPLOAD_KEY'),
+        'api_key' => env('EFV_API_KEY'),
+        'api_secret' => env('EFV_API_SECRET'),
+    ],
+
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
     ],
