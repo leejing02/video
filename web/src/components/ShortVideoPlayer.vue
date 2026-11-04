@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import type { ObjectDirective } from 'vue'
+import type Hls from 'hls.js'
 import { mediaUrl } from '@/utils/media-url'
 import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
@@ -49,6 +51,52 @@ function syncVideo(el: HTMLVideoElement | null, idx: number) {
     el.pause()
     try { el.currentTime = 0 } catch {}
   }
+}
+
+const streams = new WeakMap<HTMLVideoElement, { hls?: Hls }>()
+
+function detachSource(el: HTMLVideoElement) {
+  streams.get(el)?.hls?.destroy()
+  streams.delete(el)
+}
+
+async function attachSource(el: HTMLVideoElement, url: string) {
+  detachSource(el)
+  const source: { hls?: Hls } = {}
+  streams.set(el, source)
+  if (!/\.m3u8(?:[?#]|$)/i.test(url) || el.canPlayType('application/vnd.apple.mpegurl')) {
+    el.src = url
+    return
+  }
+
+  el.removeAttribute('src')
+  el.load()
+  try {
+    const { default: Hls } = await import('hls.js')
+    if (streams.get(el) !== source) return
+    if (!Hls.isSupported()) {
+      el.src = url
+      return
+    }
+    source.hls = new Hls()
+    source.hls.on(Hls.Events.ERROR, (_, error) => {
+      if (error.fatal && el.closest('[data-idx]')?.getAttribute('data-idx') === String(currentIdx.value)) {
+        showToast('视频加载失败')
+      }
+    })
+    source.hls.loadSource(url)
+    source.hls.attachMedia(el)
+  } catch {
+    if (streams.get(el) === source) showToast('播放器加载失败')
+  }
+}
+
+const vVideoSource: ObjectDirective<HTMLVideoElement, string> = {
+  mounted(el, { value }) { void attachSource(el, value) },
+  updated(el, { value, oldValue }) {
+    if (value !== oldValue) void attachSource(el, value)
+  },
+  beforeUnmount: detachSource,
 }
 
 watch(currentIdx, () => {
@@ -135,7 +183,8 @@ onUnmounted(() => observer?.disconnect())
         <video
           v-if="isNear(idx)"
           :ref="el => syncVideo(el as HTMLVideoElement, idx)"
-          :src="v.url"
+          v-video-source="v.url"
+          @loadedmetadata="syncVideo($event.currentTarget as HTMLVideoElement, idx)"
           :poster="mediaUrl(v.cover) || undefined"
           loop
           playsinline

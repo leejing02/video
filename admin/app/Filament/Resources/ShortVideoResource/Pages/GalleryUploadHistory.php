@@ -80,7 +80,7 @@ class GalleryUploadHistory extends Page
                                 'url' => '',
                                 'status' => Video::STATUS_DRAFT,
                             ]);
-                            $files[$order] = ['name' => $name, 'status' => '已补录本地草稿', 'video_id' => $video->id];
+                            $files[$order] = ['name' => $name, 'status' => '已补录本地草稿', 'video_id' => $video->id, 'efv_id' => $item['_id'] ?? null];
                             $count++;
                         }
                         ksort($files);

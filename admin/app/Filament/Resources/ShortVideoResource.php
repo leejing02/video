@@ -72,6 +72,12 @@ class ShortVideoResource extends VideoResource
                 Forms\Components\TextInput::make('url')
                     ->label('视频 URL')->url()->required()
                     ->placeholder('https://cdn.example.com/short.mp4'),
+                Forms\Components\Placeholder::make('remote_cover_preview')
+                    ->label('当前远程封面')
+                    ->visible(fn (?Video $record) => str_starts_with((string) $record?->cover, 'https://'))
+                    ->content(fn (?Video $record) => new \Illuminate\Support\HtmlString(
+                        '<img width="120" alt="当前封面" src="'.e($record?->cover).'">'
+                    )),
                 Forms\Components\FileUpload::make('cover')
                     ->label('封面（竖图）')
                     ->image()
