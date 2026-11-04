@@ -34,18 +34,27 @@ const messages = computed(() => selected.value === null ? [] : cache.value[selec
 const filtered = computed(() => rooms.value.filter(item => item.name.toLowerCase().includes(query.value.toLowerCase()) && (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
 const totalUnread = computed(() => rooms.value.reduce((sum, item) => sum + item.unread_count, 0))
 
+const swipeOffset = ref(0)
+const swipeDragging = ref(false)
+const swipeClosing = ref(false)
+let swipeTimer: ReturnType<typeof setTimeout> | undefined
 let backSwipe: { id: number; x: number; y: number } | undefined
 
 function cancelBackSwipe() {
   backSwipe = undefined
+  swipeDragging.value = false
+  swipeOffset.value = 0
 }
 
 function returnToConversations() {
+  clearTimeout(swipeTimer)
   cancelBackSwipe()
+  swipeClosing.value = false
   mobileOpen.value = false
 }
 
 function startBackSwipe(event: TouchEvent) {
+  if (swipeClosing.value) return
   cancelBackSwipe()
   if (!mobileOpen.value || !window.matchMedia('(max-width: 700px)').matches || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return
@@ -63,8 +72,13 @@ function moveBackSwipe(event: TouchEvent) {
   }
   const dx = touch.clientX - start.x
   const dy = Math.abs(touch.clientY - start.y)
-  if (dy > 12 && dy >= dx) cancelBackSwipe()
-  else if (dx > 8 && dx > dy && event.cancelable) event.preventDefault()
+  if (!swipeDragging.value && dy > 12 && dy >= dx) {
+    cancelBackSwipe()
+  } else if (swipeDragging.value || (dx > 8 && dx > dy)) {
+    if (event.cancelable) event.preventDefault()
+    swipeDragging.value = true
+    swipeOffset.value = Math.max(0, dx)
+  }
 }
 
 function endBackSwipe(event: TouchEvent) {
@@ -75,7 +89,13 @@ function endBackSwipe(event: TouchEvent) {
   if (!touch) return
   const dx = touch.clientX - start.x
   const dy = Math.abs(touch.clientY - start.y)
-  if (dx >= 64 && dx > dy * 1.5) returnToConversations()
+  if (dx < 64 || dx <= dy * 1.5) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    returnToConversations()
+    return
+  }
+  swipeClosing.value = true
+  swipeTimer = setTimeout(returnToConversations, 220)
 }
 
 function merge(id: number, incoming: Message[]) {
@@ -192,7 +212,7 @@ onMounted(async () => {
   refreshTimer = setInterval(() => { void recover() }, 15000)
   document.addEventListener('visibilitychange', onVisible)
 })
-onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible) })
+onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible) })
 </script>
 
 <template>
@@ -214,7 +234,7 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
         <div v-if="!filtered.length" class="chat-placeholder"><span>✉</span><p>暂无{{ filter === 'direct' ? '私聊' : '会话' }}</p><small>在群聊中点击成员头像，即可发起私聊</small></div>
       </div>
     </aside>
-    <section class="conversation-detail" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
+    <section class="conversation-detail" :class="{ 'swipe-dragging': swipeDragging, 'swipe-closing': swipeClosing, 'swipe-revealing': swipeOffset > 0 || swipeClosing }" :style="{ '--chat-swipe-offset': swipeOffset + 'px' }" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
       <template v-if="room">
         <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="returnToConversations">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
         <div v-if="error" class="chat-error" role="alert">{{ error }}<button @click="error = ''">关闭</button></div>
