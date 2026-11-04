@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
+import { mediaUrl } from '@/utils/media-url'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
@@ -33,6 +34,8 @@ const categories = ref<(Category | ShortCategory)[]>([])
 const selected = ref<number | null>(null)
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
+const pendingEntryCovers = ref(new Set<number>())
+let entryCoverTimeout: ReturnType<typeof setTimeout> | undefined
 const query = ref('')
 const searching = ref(false)
 const loading = ref(false)
@@ -40,7 +43,11 @@ const error = ref('')
 const playerItems = ref<ShortVideo[]>([])
 const playerIndex = ref<number | null>(null)
 watch(playerIndex, index => { navigationHidden.value = index !== null }, { flush: 'sync' })
-onUnmounted(() => { generation++; navigationHidden.value = false })
+onUnmounted(() => {
+  generation++
+  clearTimeout(entryCoverTimeout)
+  navigationHidden.value = false
+})
 const page = ref(1)
 const more = ref(false)
 const scrollArea = ref<HTMLElement | null>(null)
@@ -58,6 +65,7 @@ watch(nextPageMarker, (marker, _, onCleanup) => {
 }, { flush: 'post' })
 let generation = 0
 const visible = computed(() => videos.value.filter(v => `${v.title} ${v.user?.name ?? ''} ${v.user?.username ?? ''}`.toLowerCase().includes(query.value.trim().toLowerCase())))
+const waitingForEntryCovers = computed(() => visible.value.some(video => pendingEntryCovers.value.has(video.id)))
 async function load(append = false) {
   const request = ++generation
   loading.value = true
@@ -65,6 +73,8 @@ async function load(append = false) {
   if (!append) {
     videos.value = []
     eagerCoverIds.value.clear()
+    pendingEntryCovers.value.clear()
+    clearTimeout(entryCoverTimeout)
     more.value = false
     if (props.kind === 'short' && scrollArea.value) scrollArea.value.scrollTop = 0
   }
@@ -75,8 +85,11 @@ async function load(append = false) {
     if (request !== generation) return
     const items = result.data ?? []
     if (props.kind === 'short') {
-      for (const video of items.filter(video => video.cover?.trim()).slice(0, 6)) {
-        eagerCoverIds.value.add(video.id)
+      const coverIds = items.filter(video => mediaUrl(video.cover)).slice(0, 6).map(video => video.id)
+      for (const id of coverIds) eagerCoverIds.value.add(id)
+      if (!append && coverIds.length) {
+        pendingEntryCovers.value = new Set(coverIds)
+        entryCoverTimeout = setTimeout(() => pendingEntryCovers.value.clear(), 5000)
       }
     }
     videos.value = append ? [...videos.value, ...items] : items
@@ -118,12 +131,12 @@ onMounted(() => {
     <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
     <div ref="scrollArea" class="discovery-scroll">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <div v-else class="video-grid" :aria-busy="loading" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
-        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="eagerCoverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
+      <div v-else class="video-grid" :aria-busy="loading || waitingForEntryCovers" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { invisible: waitingForEntryCovers }]">
+        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="eagerCoverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="pendingEntryCovers.delete(video.id)" @click="open(video)" />
       </div>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(kind === 'short' && videos.length > 0)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
-      <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
+      <div v-if="kind === 'short' && autoLoad && more && !error && !query && !waitingForEntryCovers && playerIndex === null">
         <p v-if="loading" class="sr-only" role="status">加载中…</p>
         <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
       </div>
