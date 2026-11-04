@@ -11,7 +11,7 @@
                     return;
                 }
                 this.selectionError = '';
-                this.files.push(...selected.map(file => ({ file, done: false, status: '待上传' })));
+                this.files.push(...selected.map(file => ({ file, done: false, progress: 0, status: '待上传' })));
             },
             clear() {
                 this.files = [];
@@ -26,21 +26,37 @@
                 try {
                     for (const [order, entry] of this.files.entries()) {
                         if (entry.done) continue;
-                        entry.status = '上传中';
+                        entry.progress = 0;
+                        entry.status = '正在上传到后台';
                         const data = new FormData();
                         data.append('batch', this.batch);
                         data.append('category', this.category);
                         data.append('order', order);
                         data.append('file', entry.file);
                         try {
-                            const response = await fetch(this.$el.action, {
-                                method: 'POST',
-                                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.$refs.csrf.value },
-                                body: data
+                            const response = await new Promise((resolve, reject) => {
+                                const xhr = new XMLHttpRequest();
+                                xhr.open('POST', this.$el.action);
+                                xhr.setRequestHeader('Accept', 'application/json');
+                                xhr.setRequestHeader('X-CSRF-TOKEN', this.$refs.csrf.value);
+                                xhr.responseType = 'json';
+                                xhr.upload.onprogress = event => {
+                                    if (event.lengthComputable) {
+                                        entry.progress = Math.min(100, Math.floor(event.loaded / event.total * 100));
+                                    }
+                                };
+                                xhr.upload.onload = () => {
+                                    entry.progress = 100;
+                                    entry.status = '后台正在提交给 EFV';
+                                };
+                                xhr.onload = () => resolve(xhr);
+                                xhr.onerror = reject;
+                                xhr.onabort = reject;
+                                xhr.send(data);
                             });
-                            const result = await response.json();
-                            entry.done = response.ok;
-                            entry.status = result.message || '上传失败';
+                            entry.done = response.status >= 200 && response.status < 300 && !!response.response;
+                            entry.status = response.response?.message || '上传失败（HTTP ' + response.status + '）';
+                            if (response.status === 503) break;
                         } catch {
                             entry.status = '上传未确认，可重试';
                         }
@@ -72,7 +88,13 @@
             </div>
             <ol aria-live="polite" class="space-y-1">
                 <template x-for="(entry, index) in files" x-bind:key="index">
-                    <li><span x-text="entry.file.name"></span> · <span x-text="entry.status"></span></li>
+                    <li>
+                        <span x-text="entry.file.name"></span> · <span x-text="entry.status"></span>
+                        <div>
+                            <progress max="100" x-bind:value="entry.progress" x-bind:aria-label="'上传到后台：' + entry.file.name"></progress>
+                            <span x-text="entry.progress + '%'"></span>
+                        </div>
+                    </li>
                 </template>
             </ol>
             <x-filament::button type="submit" x-bind:disabled="busy || !category || !files.length || files.length > 100 || files.every(entry => entry.done)">

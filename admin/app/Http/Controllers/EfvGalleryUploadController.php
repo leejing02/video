@@ -41,8 +41,14 @@ class EfvGalleryUploadController extends Controller
 
         $config = config('services.efv');
         $base = rtrim($config['endpoint'], '/');
-        abort_unless(parse_url($base, PHP_URL_SCHEME) === 'https'
-            && $config['upload_key'] && $config['api_key'] && $config['api_secret'], 503, '请先配置 EFV 上传及图集管理凭证');
+        abort_unless(parse_url($base, PHP_URL_SCHEME) === 'https', 503, 'EFV_ENDPOINT 必须使用 HTTPS');
+        $missing = [];
+        foreach (['upload_key', 'api_key', 'api_secret'] as $key) {
+            if (trim((string) $config[$key]) === '') {
+                $missing[] = 'EFV_'.strtoupper($key);
+            }
+        }
+        abort_if($missing, 503, '后台容器未读取到 '.implode('、', $missing));
         $http = Http::baseUrl($base)->acceptJson()->connectTimeout(5)->withoutRedirecting();
         $batch = strtolower($data['batch']);
         $batches = DB::table('efv_gallery_batches');
