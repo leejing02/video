@@ -104,13 +104,14 @@ button {cursor:pointer;}button:disabled{cursor:default;}
     position: absolute;
     inset: 0;
     z-index: 1;
+    touch-action: pan-y;
     transform: translateX(var(--chat-swipe-offset, 0px));
   }
   .conversation-open:not(.swipe-dragging) :is(.conversation-list, .conversation-detail) {
-    transition: transform 220ms cubic-bezier(.2,.75,.25,1);
+    transition: transform var(--chat-swipe-duration, 220ms) cubic-bezier(.16,1,.3,1);
   }
   .conversation-open.swipe-closing .conversation-list { transform: translateX(0); }
-  .conversation-open.swipe-closing .conversation-detail { transform: translateX(100%); }
+  .conversation-open.swipe-closing .conversation-detail { transform: translateX(100%); pointer-events: none; }
   .chat-back { display: grid; font-size: 30px; background: none; width: 25px; }
   .input-focused .chat-mode .bottom-nav { display: none; }
   .conversation-open .chat-composer { padding-bottom: max(10px,var(--safe-bottom)); }

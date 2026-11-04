@@ -37,8 +37,9 @@ const totalUnread = computed(() => rooms.value.reduce((sum, item) => sum + item.
 const swipeOffset = ref(0)
 const swipeDragging = ref(false)
 const swipeClosing = ref(false)
+const swipeDuration = ref(220)
 let swipeTimer: ReturnType<typeof setTimeout> | undefined
-let backSwipe: { id: number; x: number; y: number } | undefined
+let backSwipe: { id: number; x: number; y: number; lastX: number; lastTime: number; velocity: number } | undefined
 
 function cancelBackSwipe() {
   backSwipe = undefined
@@ -59,7 +60,7 @@ function startBackSwipe(event: TouchEvent) {
   if (!mobileOpen.value || !window.matchMedia('(max-width: 700px)').matches || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return
   const touch = event.touches[0]
-  if (touch.clientX <= 32) backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY }
+  if (touch.clientX <= 32) backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: event.timeStamp, velocity: 0 }
 }
 
 function moveBackSwipe(event: TouchEvent) {
@@ -77,7 +78,11 @@ function moveBackSwipe(event: TouchEvent) {
   } else if (swipeDragging.value || (dx > 8 && dx > dy)) {
     if (event.cancelable) event.preventDefault()
     swipeDragging.value = true
-    swipeOffset.value = Math.max(0, Math.min(dx, window.innerWidth))
+    swipeOffset.value = Math.max(0, Math.min(dx - 6, window.innerWidth))
+    const elapsed = event.timeStamp - start.lastTime
+    if (elapsed > 0) start.velocity = (touch.clientX - start.lastX) / elapsed
+    start.lastX = touch.clientX
+    start.lastTime = event.timeStamp
   }
 }
 
@@ -93,7 +98,11 @@ function endBackSwipe(event: TouchEvent) {
   }
   const dx = touch.clientX - start.x
   const dy = Math.abs(touch.clientY - start.y)
-  if (dx < 64 || dx <= dy * 1.5) {
+  const velocity = event.timeStamp - start.lastTime < 80 ? Math.max(0, start.velocity) : 0
+  const projected = swipeOffset.value + Math.min(velocity, 2) * 85
+  const shouldReturn = dx >= 32 && dx > dy * 1.5 && projected >= Math.min(100, window.innerWidth * .24)
+  if (!shouldReturn) {
+    swipeDuration.value = Math.min(240, 145 + swipeOffset.value)
     cancelBackSwipe()
     return
   }
@@ -101,8 +110,10 @@ function endBackSwipe(event: TouchEvent) {
     returnToConversations()
     return
   }
+  const remaining = window.innerWidth - swipeOffset.value
+  swipeDuration.value = Math.min(300, Math.max(120, remaining / Math.max(.95, velocity)))
   swipeClosing.value = true
-  swipeTimer = setTimeout(returnToConversations, 220)
+  swipeTimer = setTimeout(returnToConversations, swipeDuration.value + 20)
 }
 
 function merge(id: number, incoming: Message[]) {
@@ -223,7 +234,7 @@ onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disp
 </script>
 
 <template>
-  <div class="messenger" :class="{ 'conversation-open': mobileOpen, 'swipe-dragging': swipeDragging, 'swipe-closing': swipeClosing }" :style="{ '--chat-swipe-offset': swipeOffset + 'px' }">
+  <div class="messenger" :class="{ 'conversation-open': mobileOpen, 'swipe-dragging': swipeDragging, 'swipe-closing': swipeClosing }" :style="{ '--chat-swipe-offset': swipeOffset + 'px', '--chat-swipe-duration': swipeDuration + 'ms' }">
     <aside class="conversation-list">
       <header class="chat-list-header">
         <div class="chat-connection" role="status"><i :class="{ online: connected }" aria-hidden="true"></i><span>{{ connected ? '实时消息已连接' : '实时消息连接中' }}</span></div>
