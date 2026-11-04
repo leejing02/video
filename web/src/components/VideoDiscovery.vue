@@ -5,6 +5,7 @@ import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
+import { loadShortFeedFirstPage } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
@@ -81,7 +82,11 @@ async function load(append = false) {
   const nextPage = append ? page.value + 1 : 1
   try {
     const params = { category_id: selected.value ?? undefined, page: nextPage, per_page: 30 }
-    const result = props.kind === 'short' ? await shortVideoApi.list(params) : await videoApi.list({ ...params, type: 'long' })
+    const result = await (props.kind === 'long'
+      ? videoApi.list({ ...params, type: 'long' })
+      : !append && selected.value === null
+        ? loadShortFeedFirstPage()
+        : shortVideoApi.list(params))
     if (request !== generation) return
     const items = result.data ?? []
     if (props.kind === 'short') {

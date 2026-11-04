@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { provide, ref } from 'vue'
+import { provide, ref, watch } from 'vue'
+import { warmShortFeed } from '@/utils/short-feed-prefetch'
 const navigationHidden = ref(false)
 provide('mainNavigationHidden', navigationHidden)
 const route = useRoute()
 const router = useRouter()
+watch(() => route.name, name => {
+  if (name === 'chat') warmShortFeed()
+}, { immediate: true })
 const tabs = [
   { name: 'chat', label: '群聊' },
   { name: 'short', label: '短视频' },
