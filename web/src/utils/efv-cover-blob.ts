@@ -23,18 +23,18 @@ export function prefetchCover(value: string, expiresAt: number) {
   if (!efvCoverPath.test(value)) {
     const image = new Image()
     image.src = value
-    void image.decode().catch(() => {})
-    return
+    return image.decode().catch(() => {})
   }
 
-  if (warmedCovers.has(value)) return
+  const cached = warmedCovers.get(value)
+  if (cached && Date.now() < cached.expiresAt) return cached.blob.catch(() => {})
   const entry = { blob: fetchCover(value, AbortSignal.timeout(10_000)), expiresAt }
   warmedCovers.set(value, entry)
   const remove = () => {
     if (warmedCovers.get(value) === entry) warmedCovers.delete(value)
   }
-  void entry.blob.catch(remove)
   setTimeout(remove, Math.max(0, expiresAt - Date.now()))
+  return entry.blob.catch(remove)
 }
 
 function release(el: HTMLElement) {

@@ -5,7 +5,7 @@ import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
-import { loadShortFeedFirstPage } from '@/utils/short-feed-prefetch'
+import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
@@ -36,6 +36,7 @@ const selected = ref<number | null>(null)
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
 const pendingEntryCovers = ref(new Set<number>())
+let disposed = false
 let entryCoverTimeout: ReturnType<typeof setTimeout> | undefined
 const query = ref('')
 const searching = ref(false)
@@ -45,6 +46,7 @@ const playerItems = ref<ShortVideo[]>([])
 const playerIndex = ref<number | null>(null)
 watch(playerIndex, index => { navigationHidden.value = index !== null }, { flush: 'sync' })
 onUnmounted(() => {
+  disposed = true
   generation++
   clearTimeout(entryCoverTimeout)
   navigationHidden.value = false
@@ -84,8 +86,8 @@ async function load(append = false) {
     const params = { category_id: selected.value ?? undefined, page: nextPage, per_page: 30 }
     const result = await (props.kind === 'long'
       ? videoApi.list({ ...params, type: 'long' })
-      : !append && selected.value === null
-        ? loadShortFeedFirstPage()
+      : !append
+        ? loadShortFeedFirstPage(selected.value)
         : shortVideoApi.list(params))
     if (request !== generation) return
     const items = result.data ?? []
@@ -114,7 +116,15 @@ function open(video: ShortVideo | Video) {
 onMounted(() => {
   void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
-  void request.then(result => { categories.value = Array.isArray(result) ? result : result.data ?? [] }).catch(() => {})
+  void request.then(async result => {
+    if (disposed) return
+    const items = Array.isArray(result) ? result : result.data ?? []
+    categories.value = items
+    if (props.kind !== 'short') return
+    for (let index = 0; index < items.length && !disposed; index += 2) {
+      await Promise.all(items.slice(index, index + 2).map(category => warmShortFeed(category.id)))
+    }
+  }).catch(() => {})
 })
 </script>
 
