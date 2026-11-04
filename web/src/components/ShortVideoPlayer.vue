@@ -115,6 +115,13 @@ function mediaReady(event: Event, idx: number) {
   syncVideo(el, idx)
 }
 
+function revealVideo(event: Event) {
+  const video = event.currentTarget as HTMLVideoElement
+  if (streams.has(video) && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    video.dataset.frameReady = 'true'
+  }
+}
+
 function mediaFailed(event: Event) {
   const el = event.currentTarget as HTMLVideoElement
   const source = streams.get(el)
@@ -124,6 +131,7 @@ function mediaFailed(event: Event) {
 function detachSource(el: HTMLVideoElement) {
   const source = streams.get(el)
   streams.delete(el)
+  delete el.dataset.frameReady
   clearTimeout(source?.timeout)
   source?.hls?.destroy()
 }
@@ -287,6 +295,7 @@ onUnmounted(() => observer?.disconnect())
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900"
         @click="togglePlay"
       >
+        <img v-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-cover" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
@@ -294,19 +303,17 @@ onUnmounted(() => observer?.disconnect())
           @durationchange="updatePlayback($event, idx)"
           @timeupdate="updatePlayback($event, idx)"
           @play="updatePlayback($event, idx)"
-          @playing="updatePlayback($event, idx)"
+          @loadeddata="revealVideo"
+          @playing="revealVideo($event); updatePlayback($event, idx)"
           @waiting="updatePlayback($event, idx)"
           @pause="updatePlayback($event, idx)"
           @ended="updatePlayback($event, idx)"
           @error="mediaFailed"
-          v-efv-cover-blob:poster="mediaUrl(v.cover)"
           loop
           playsinline
           preload="metadata"
-          class="h-full w-full object-cover"
+          class="short-playback-frame absolute inset-0 h-full w-full object-cover bg-gradient-to-br from-slate-700 to-slate-900"
         />
-        <img v-else-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" class="h-full w-full object-cover" loading="lazy" />
-        <div v-else class="h-full w-full bg-gradient-to-br from-gray-900 to-black" />
 
         <template v-if="idx === currentIdx">
           <button
@@ -438,3 +445,7 @@ onUnmounted(() => observer?.disconnect())
     </div>
   </div>
 </template>
+
+<style scoped>
+.short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
+</style>
