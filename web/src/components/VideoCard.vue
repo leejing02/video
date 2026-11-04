@@ -3,16 +3,20 @@ import { computed, ref, watch } from 'vue'
 import { mediaUrl } from '@/utils/media-url'
 import { vEfvCoverBlob } from '@/utils/efv-cover-blob'
 import type { ShortVideo, Video } from '@/types/models'
-const props = defineProps<{ video: Video | ShortVideo; layout?: 'horizontal' | 'vertical' }>()
+const props = defineProps<{ video: Video | ShortVideo; layout?: 'horizontal' | 'vertical'; hidePendingCover?: boolean }>()
 const failed = ref(false)
+const loaded = ref(false)
 const cover = computed(() => mediaUrl(props.video.cover))
-watch(cover, () => { failed.value = false })
+watch(cover, () => {
+  failed.value = false
+  loaded.value = false
+})
 </script>
 
 <template>
-  <button class="video-tile" :class="{ landscape: layout === 'horizontal' }" :aria-label="`播放：${video.title}`">
+  <button class="video-tile" :class="{ landscape: layout === 'horizontal', invisible: hidePendingCover && cover && !loaded && !failed }" :aria-label="`播放：${video.title}`">
     <div class="video-poster">
-      <img v-if="cover && !failed" v-efv-cover-blob="cover" :alt="video.title" loading="lazy" @error="failed = true" />
+      <img v-if="cover && !failed" v-efv-cover-blob="cover" alt="" loading="lazy" @load="loaded = true" @error="failed = true" />
       <div v-else class="poster-fallback"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="32" rx="5"/><path d="m20 17 12 7-12 7Z"/></svg><span>暂无封面</span></div>
       <span v-if="layout === 'horizontal' && video.duration" class="video-duration">{{ Math.floor(video.duration / 60) }}:{{ String(Math.floor(video.duration % 60)).padStart(2, '0') }}</span>
     </div>

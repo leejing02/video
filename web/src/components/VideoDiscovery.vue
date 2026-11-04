@@ -91,11 +91,11 @@ onMounted(() => {
       <input v-model="query" aria-label="搜索视频标题或作者" placeholder="搜索视频、作者" type="search" />
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
-    <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
+    <CategoryStrip :categories="categories" :hide-covers="kind === 'short'" v-model="selected" @update:model-value="load()" />
     <div class="discovery-scroll">
-      <div v-if="loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <div v-else class="video-grid" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
-        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
+      <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
+      <div v-else class="video-grid" :aria-busy="loading" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
+        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
       </div>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load()">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
