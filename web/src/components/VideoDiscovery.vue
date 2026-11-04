@@ -299,7 +299,7 @@ onMounted(() => {
       @touchstart.passive="startCategorySwipe" @touchmove.passive="trackCategorySwipe"
       @touchend.passive="endCategorySwipe" @touchcancel.passive="cancelCategorySwipe">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <TransitionGroup v-else tag="div" name="category-slide" class="relative" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
+      <TransitionGroup v-else tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
         <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
           <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video)" />
@@ -321,6 +321,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.category-track {
+  --category-gap: 4px;
+}
+@media (min-width: 700px) {
+  .category-track { --category-gap: 8px; }
+}
+.category-track .short-masonry { column-gap: var(--category-gap); }
+
 .category-preview .video-grid:not(.category-preview-incoming) {
   animation: none;
   transform: translateX(calc(-1 * var(--category-drag)));
@@ -328,7 +336,7 @@ onMounted(() => {
 .category-preview .category-preview-incoming {
   height: auto;
   visibility: visible;
-  transform: translateX(calc(var(--category-preview-direction) * 100% - var(--category-drag)));
+  transform: translateX(calc(var(--category-preview-direction) * (100% + var(--category-gap)) - var(--category-drag)));
 }
 .category-returning .video-grid { transition: transform 180ms ease-out; }
 
@@ -345,12 +353,12 @@ onMounted(() => {
 }
 
 @keyframes category-slide-in {
-  from { transform: translateX(calc(var(--category-slide-direction) * 100% - var(--category-release))); }
+  from { transform: translateX(calc(var(--category-slide-direction) * (100% + var(--category-gap)) - var(--category-release))); }
   to { transform: translateX(0); }
 }
 
 @keyframes category-slide-out {
   from { transform: translateX(calc(-1 * var(--category-release))); }
-  to { transform: translateX(calc(var(--category-slide-direction) * -100%)); }
+  to { transform: translateX(calc(-1 * var(--category-slide-direction) * (100% + var(--category-gap)))); }
 }
 </style>
