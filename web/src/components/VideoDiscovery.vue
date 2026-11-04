@@ -34,6 +34,40 @@ const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false)
 const categories = ref<(Category | ShortCategory)[]>([])
 const selected = ref<number | null>(null)
 const displayedCategory = ref<number | null>(null)
+const slideDirection = ref(0)
+const categoryOrder = computed(() => [null, ...categories.value.map(category => category.id)])
+let categoryTouch: { x: number; y: number; id: number } | undefined
+
+function startCategorySwipe(event: TouchEvent) {
+  categoryTouch = undefined
+  if (props.kind !== 'short' || playerIndex.value !== null || event.touches.length !== 1) return
+  const touch = event.touches[0]
+  if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return
+  categoryTouch = { x: touch.clientX, y: touch.clientY, id: touch.identifier }
+}
+
+function trackCategorySwipe(event: TouchEvent) {
+  if (!categoryTouch) return
+  const touch = event.touches[0]
+  if (event.touches.length !== 1 || touch.identifier !== categoryTouch.id ||
+      (Math.abs(touch.clientY - categoryTouch.y) > 12 &&
+       Math.abs(touch.clientY - categoryTouch.y) >= Math.abs(touch.clientX - categoryTouch.x))) {
+    categoryTouch = undefined
+  }
+}
+
+function endCategorySwipe(event: TouchEvent) {
+  const start = categoryTouch
+  categoryTouch = undefined
+  if (!start) return
+  const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id)
+  if (!touch) return
+  const dx = touch.clientX - start.x
+  if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(touch.clientY - start.y) * 1.5) return
+  const index = categoryOrder.value.indexOf(displayedCategory.value) + (dx < 0 ? 1 : -1)
+  const category = categoryOrder.value[index]
+  if (category !== undefined) selectCategory(category)
+}
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
 const pendingEntryCovers = ref(new Set<number>())
@@ -88,6 +122,9 @@ function showStagedGrid() {
   clearTimeout(entryCoverTimeout)
   videos.value = incoming.items
   eagerCoverIds.value = incoming.coverIds
+  slideDirection.value = incoming.items.length && displayedGrid.value !== 0
+    ? Math.sign(categoryOrder.value.indexOf(selected.value) - categoryOrder.value.indexOf(displayedCategory.value))
+    : 0
   displayedGrid.value = incoming.key
   displayedCategory.value = selected.value
   page.value = 1
@@ -207,13 +244,16 @@ onMounted(() => {
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
     <CategoryStrip :categories="categories" :model-value="kind === 'short' ? displayedCategory : selected" @update:model-value="selectCategory" />
-    <div ref="scrollArea" class="discovery-scroll">
+    <div ref="scrollArea" class="discovery-scroll" :class="{ 'touch-pan-y overflow-x-hidden': kind === 'short' }"
+      @touchstart.passive="startCategorySwipe" @touchmove.passive="trackCategorySwipe"
+      @touchend.passive="endCategorySwipe" @touchcancel.passive="categoryTouch = undefined">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <div v-else class="relative">
-        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden }]">
+      <TransitionGroup v-else tag="div" name="category-slide" class="relative"
+        :style="{ '--category-slide-direction': slideDirection }">
+        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0 }]">
           <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video)" />
         </div>
-      </div>
+      </TransitionGroup>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
       <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
@@ -228,3 +268,27 @@ onMounted(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.category-slide-current {
+  animation: category-slide-in 220ms ease-out both;
+}
+
+.category-slide-leave-active.category-slide-current,
+.category-slide-leave-active:not(.invisible) {
+  position: absolute;
+  inset: 0 0 auto;
+  pointer-events: none;
+  animation: category-slide-out 220ms ease-out both;
+}
+
+@keyframes category-slide-in {
+  from { transform: translateX(calc(var(--category-slide-direction) * 100%)); }
+  to { transform: translateX(0); }
+}
+
+@keyframes category-slide-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(var(--category-slide-direction) * -100%)); }
+}
+</style>
