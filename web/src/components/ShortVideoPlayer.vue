@@ -60,15 +60,26 @@ function setupObserver() {
   }, 0)
 }
 
-function syncVideo(el: HTMLVideoElement | null, idx: number) {
-  if (!el) return
+async function playVideo(video: HTMLVideoElement, autoplay = false) {
+  if (video.readyState === HTMLMediaElement.HAVE_NOTHING) return
+
+  try {
+    await video.play()
+  } catch (error) {
+    if (video !== activeVideo() || (error instanceof DOMException && error.name === 'AbortError')) return
+    if (autoplay && error instanceof DOMException && error.name === 'NotAllowedError') {
+      video.muted = true
+      await video.play().catch(() => {})
+    } else if (!autoplay) {
+      showToast('暂时无法播放')
+    }
+  }
+}
+
+function syncVideo(el: HTMLVideoElement, idx: number) {
   if (idx === currentIdx.value) {
     el.muted = false
-    el.play().catch(() => {
-      if (idx !== currentIdx.value || !el.isConnected) return
-      el.muted = true
-      el.play().catch(() => {})
-    })
+    void playVideo(el, true)
   } else {
     el.pause()
     try { el.currentTime = 0 } catch {}
@@ -150,7 +161,7 @@ function togglePlay() {
   const video = activeVideo()
   if (!video) return
   if (video.paused) {
-    video.play().catch(() => showToast('暂时无法播放'))
+    void playVideo(video)
   } else {
     video.pause()
   }
