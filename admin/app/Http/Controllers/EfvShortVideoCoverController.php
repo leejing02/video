@@ -26,7 +26,7 @@ class EfvShortVideoCoverController extends Controller
                     $cover = Cache::get($cacheKey);
                     if ($cover === null) {
                         $cover = $this->resolveCover($record, $origin, $sync) ?? '';
-                        Cache::put($cacheKey, $cover, $cover ? now()->addHour() : now()->addMinute());
+                        Cache::put($cacheKey, $cover, $cover ? now()->addMinutes(5) : now()->addMinute());
                     }
                 } finally {
                     $lock->release();
@@ -49,7 +49,7 @@ class EfvShortVideoCoverController extends Controller
             }
             $movie = $sync->fetchMovie($id);
 
-            return $sync->downloadCover($sync->coverCandidates($movie), $origin);
+            return $sync->downloadCover($sync->coverCandidates($movie), $origin, preferFirst: true);
         } catch (DomainException) {
             return null;
         }

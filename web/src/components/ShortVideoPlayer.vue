@@ -107,6 +107,8 @@ function mediaReady(event: Event, idx: number) {
   const el = event.currentTarget as HTMLVideoElement
   const source = streams.get(el)
   if (!source) return
+  el.classList.toggle('object-contain', el.videoWidth > el.videoHeight)
+  el.classList.toggle('object-cover', el.videoWidth <= el.videoHeight)
   clearTimeout(source.timeout)
   if (idx === currentIdx.value) loadState.value = 'ready'
   updatePlayback(event, idx)
@@ -282,7 +284,7 @@ onUnmounted(() => observer?.disconnect())
         :key="v.id"
         :data-idx="idx"
         :inert="idx !== currentIdx || undefined"
-        class="relative h-full w-full snap-start flex items-center justify-center"
+        class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900"
         @click="togglePlay"
       >
         <video
@@ -301,9 +303,9 @@ onUnmounted(() => observer?.disconnect())
           loop
           playsinline
           preload="metadata"
-          class="h-full w-full object-contain bg-black"
+          class="h-full w-full object-cover"
         />
-        <img v-else-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" class="h-full w-full object-contain bg-black" loading="lazy" />
+        <img v-else-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" class="h-full w-full object-cover" loading="lazy" />
         <div v-else class="h-full w-full bg-gradient-to-br from-gray-900 to-black" />
 
         <template v-if="idx === currentIdx">
