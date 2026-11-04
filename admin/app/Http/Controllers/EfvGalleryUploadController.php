@@ -99,7 +99,17 @@ class EfvGalleryUploadController extends Controller
             }
 
             abort_unless($response->successful() && $response->json('success'), 502, 'EFV 未接受文件（HTTP '.$response->status().'）');
-            return response()->json(['message' => $image ? '图片已加入图集' : '视频已提交转码']);
+            $files = json_decode($record->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
+            $files[$data['order']] = [
+                'name' => $file->getClientOriginalName(),
+                'status' => $image ? '图片已加入图集' : '视频已提交转码',
+            ];
+            ksort($files);
+            $batches->where('id', $batch)->update([
+                'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
+            ]);
+
+            return response()->json(['message' => $files[$data['order']]['status']]);
         } catch (ConnectionException) {
             abort(502, '连接 EFV 超时或失败，可重试当前文件');
         } finally {

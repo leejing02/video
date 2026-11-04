@@ -13,6 +13,9 @@ class ListShortVideos extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('uploadHistory')->label('上传记录')
+                ->url(ShortVideoResource::getUrl('upload-history'))
+                ->visible(fn () => UploadGallery::canAccess()),
             Actions\Action::make('uploadGallery')->label('批量上传')
                 ->url(ShortVideoResource::getUrl('upload-gallery'))
                 ->visible(fn () => UploadGallery::canAccess()),
