@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourname/video-api/internal/middleware"
@@ -11,7 +12,9 @@ import (
 )
 
 type ShortVideoHandler struct {
-	Repo *repos.ShortVideoRepo
+	Repo           *repos.ShortVideoRepo
+	EFVEndpoint    string
+	EFVPlaybackKey string
 }
 
 func (h *ShortVideoHandler) List(c *gin.Context) {
@@ -46,6 +49,10 @@ func (h *ShortVideoHandler) Show(c *gin.Context) {
 	if v == nil || v.Status != "published" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
+	}
+	if signed := signEFVPlayback(v.URL, h.EFVEndpoint, h.EFVPlaybackKey, time.Now()); signed != v.URL {
+		c.Header("Cache-Control", "private, no-store")
+		v.URL = signed
 	}
 	_ = h.Repo.IncrementViews(id)
 

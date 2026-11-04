@@ -22,6 +22,9 @@ type Config struct {
 	CORS         string
 	AnthropicKey string
 	WebDistPath  string
+
+	EFVEndpoint    string
+	EFVPlaybackKey string
 }
 
 // GamePort returns the fishing game server port (default 8001).
@@ -58,6 +61,9 @@ func Load() *Config {
 		CORS:         getEnv("CORS_ORIGINS", "*"),
 		AnthropicKey: getEnv("ANTHROPIC_API_KEY", ""),
 		WebDistPath:  getEnv("WEB_DIST_PATH", "./web/dist"),
+
+		EFVEndpoint:    getEnv("EFV_ENDPOINT", ""),
+		EFVPlaybackKey: os.Getenv("EFV_PLAYBACK_KEY"),
 	}
 }
 

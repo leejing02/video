@@ -42,7 +42,7 @@ func main() {
 	authH := &handlers.AuthHandler{Users: userRepo, Chat: chatRepo, JWTSecret: cfg.JWTSecret, JWTTTLHrs: cfg.JWTTTLHrs}
 	catH := &handlers.CategoryHandler{Categories: catRepo}
 	vidH := &handlers.VideoHandler{Videos: vidRepo}
-	shortVidH := &handlers.ShortVideoHandler{Repo: shortVidRepo}
+	shortVidH := &handlers.ShortVideoHandler{Repo: shortVidRepo, EFVEndpoint: cfg.EFVEndpoint, EFVPlaybackKey: cfg.EFVPlaybackKey}
 	cmtH := &handlers.CommentHandler{Comments: cmtRepo}
 	chatH := &handlers.ChatHandler{Chat: chatRepo, Hub: hub, JWTSecret: cfg.JWTSecret}
 	liveH := &handlers.LiveHandler{Repo: liveRepo}

@@ -134,6 +134,8 @@ services:
       JWT_SECRET: "${JWT_SECRET}"
       JWT_TTL_HOURS: "${JWT_TTL_HOURS:-720}"
       CORS_ORIGINS: "https://${ADMIN_DOMAIN},https://${API_DOMAIN}"
+      EFV_ENDPOINT: "${EFV_ENDPOINT:-https://houtai.houtai2026.top}"
+      EFV_PLAYBACK_KEY: "${EFV_PLAYBACK_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     depends_on:
       mysql:

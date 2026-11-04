@@ -82,11 +82,15 @@ function detachSource(el: HTMLVideoElement) {
   streams.delete(el)
 }
 
-async function attachSource(el: HTMLVideoElement, url: string) {
+function isHls(url: string) {
+  return /\.m3u8(?:[?#]|$)/i.test(url)
+}
+
+async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url: string }) {
   detachSource(el)
   const source: { hls?: Hls } = {}
   streams.set(el, source)
-  if (!/\.m3u8(?:[?#]|$)/i.test(url) || el.canPlayType('application/vnd.apple.mpegurl')) {
+  if (!isHls(url)) {
     el.src = url
     return
   }
@@ -94,6 +98,13 @@ async function attachSource(el: HTMLVideoElement, url: string) {
   el.removeAttribute('src')
   el.load()
   try {
+    const { video } = await shortVideoApi.show(id)
+    if (streams.get(el) !== source) return
+    url = video.url
+    if (el.canPlayType('application/vnd.apple.mpegurl')) {
+      el.src = url
+      return
+    }
     const { default: Hls } = await import('hls.js')
     if (streams.get(el) !== source) return
     if (!Hls.isSupported()) {
@@ -113,10 +124,10 @@ async function attachSource(el: HTMLVideoElement, url: string) {
   }
 }
 
-const vVideoSource: ObjectDirective<HTMLVideoElement, string> = {
+const vVideoSource: ObjectDirective<HTMLVideoElement, { id: number; url: string }> = {
   mounted(el, { value }) { void attachSource(el, value) },
   updated(el, { value, oldValue }) {
-    if (value !== oldValue) void attachSource(el, value)
+    if (value.id !== oldValue?.id || value.url !== oldValue?.url) void attachSource(el, value)
   },
   beforeUnmount: detachSource,
 }
@@ -219,8 +230,8 @@ onUnmounted(() => observer?.disconnect())
         @click="togglePlay"
       >
         <video
-          v-if="isNear(idx)"
-          v-video-source="v.url"
+          v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
+          v-video-source="{ id: v.id, url: v.url }"
           @loadedmetadata="updatePlayback($event, idx); syncVideo($event.currentTarget as HTMLVideoElement, idx)"
           @durationchange="updatePlayback($event, idx)"
           @timeupdate="updatePlayback($event, idx)"
