@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     <x-filament::section>
         <form x-data="{
-            files: [], category: '', uploader: '', batch: '', busy: false, selectionError: '',
+            files: [], category: '', uploader: '', batch: '', busy: false, selectionError: '', submitError: '',
             add(event) {
                 if (this.batch) return;
                 const selected = Array.from(event.target.files);
@@ -23,7 +23,15 @@
                 return this.files.some(entry => !/\.(jpe?g|png|webp)$/i.test(entry.file.name));
             },
             async upload() {
-                if (this.busy || !this.category || (this.needsUploader && !this.uploader) || !this.files.length || this.files.length > 100) return;
+                if (this.busy) return;
+                this.submitError = '';
+                if (!this.category) { this.submitError = '请选择所属分类'; return; }
+                if (!this.files.length) { this.submitError = '请选择要上传的文件'; return; }
+                if (this.needsUploader && !this.uploader) {
+                    this.submitError = '上传视频前，请选择本地短视频上传者';
+                    this.$refs.uploader.focus();
+                    return;
+                }
                 this.batch ||= crypto.randomUUID();
                 this.busy = true;
                 try {
@@ -69,7 +77,7 @@
                     this.busy = false;
                 }
             }
-        }" action="{{ route('admin.efv-gallery.upload') }}" x-on:submit.prevent="upload" class="space-y-5">
+        }" action="{{ route('admin.efv-gallery.upload') }}" novalidate x-on:submit.prevent="upload" class="space-y-5">
             <input type="hidden" x-ref="csrf" value="{{ csrf_token() }}">
             <p>每批文件进入同一个 EFV 合集。视频提交后由 EFV 转码。</p>
             <div>
@@ -86,7 +94,7 @@
             <div x-show="needsUploader">
                 <label for="gallery-uploader" class="block font-medium">本地短视频上传者</label>
                 <x-filament::input.wrapper>
-                    <x-filament::input.select id="gallery-uploader" x-model="uploader" x-bind:disabled="!!batch" x-bind:required="needsUploader">
+                    <x-filament::input.select id="gallery-uploader" x-ref="uploader" x-model="uploader" x-bind:disabled="!!batch" x-bind:required="needsUploader">
                         <option value="">请选择上传者</option>
                         @foreach ($uploaders as $uploader)
                             <option value="{{ $uploader->id }}">{{ $uploader->name }} · {{ $uploader->username }}</option>
@@ -112,7 +120,8 @@
                     </li>
                 </template>
             </ol>
-            <x-filament::button type="submit" x-bind:disabled="busy || !category || (needsUploader && !uploader) || !files.length || files.length > 100 || files.every(entry => entry.done)">
+            <p role="alert" x-show="submitError" x-text="submitError"></p>
+            <x-filament::button type="submit" x-bind:disabled="busy || (files.length > 0 && files.every(entry => entry.done))">
                 <span x-text="busy ? '正在上传' : batch ? '重试未成功文件' : '开始批量上传'"></span>
             </x-filament::button>
             <x-filament::button type="button" color="gray" x-bind:disabled="busy" x-on:click="clear">清空待上传</x-filament::button>

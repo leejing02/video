@@ -7,6 +7,11 @@
                 · {{ $batch->created_at }}
             </x-slot>
             <p>EFV 合集 ID：{{ $batch->group_id ?? '尚未取得' }}</p>
+            @if ($batch->group_id)
+                <x-filament::button type="button" wire:click="mountAction('importVideos', {{ \Illuminate\Support\Js::from(['batch' => $batch->id]) }})">
+                    补录到短视频
+                </x-filament::button>
+            @endif
             <ul>
                 @forelse (json_decode($batch->files ?? '[]', true) as $file)
                     <li>{{ $file['name'] }} · {{ $file['status'] }}</li>
