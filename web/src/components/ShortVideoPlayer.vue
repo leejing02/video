@@ -19,6 +19,8 @@ const showComments = ref(false)
 const commentText = ref('')
 const comments = ref<ShortVideoComment[]>([])
 const isSending = ref(false)
+const loadState = ref<'loading' | 'ready' | 'failed'>('loading')
+const loadError = ref('')
 const playback = ref({ paused: true, current: 0, duration: 0, waiting: false })
 
 function updatePlayback(event: Event, idx: number) {
@@ -86,11 +88,41 @@ function syncVideo(el: HTMLVideoElement, idx: number) {
   }
 }
 
-const streams = new WeakMap<HTMLVideoElement, { hls?: Hls }>()
+interface VideoSource {
+  hls?: Hls
+  timeout?: ReturnType<typeof setTimeout>
+}
+const streams = new WeakMap<HTMLVideoElement, VideoSource>()
+
+function sourceFailed(el: HTMLVideoElement, source: VideoSource, reason: string) {
+  if (streams.get(el) !== source || el !== activeVideo()) return
+  loadError.value = reason
+  loadState.value = 'failed'
+  detachSource(el)
+  el.pause()
+}
+
+function mediaReady(event: Event, idx: number) {
+  const el = event.currentTarget as HTMLVideoElement
+  const source = streams.get(el)
+  if (!source) return
+  clearTimeout(source.timeout)
+  if (idx === currentIdx.value) loadState.value = 'ready'
+  updatePlayback(event, idx)
+  syncVideo(el, idx)
+}
+
+function mediaFailed(event: Event) {
+  const el = event.currentTarget as HTMLVideoElement
+  const source = streams.get(el)
+  if (source) sourceFailed(el, source, '视频读取失败，点击重试')
+}
 
 function detachSource(el: HTMLVideoElement) {
-  streams.get(el)?.hls?.destroy()
+  const source = streams.get(el)
   streams.delete(el)
+  clearTimeout(source?.timeout)
+  source?.hls?.destroy()
 }
 
 function isHls(url: string) {
@@ -99,8 +131,12 @@ function isHls(url: string) {
 
 async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url: string }) {
   detachSource(el)
-  const source: { hls?: Hls } = {}
+  const source: VideoSource = {}
   streams.set(el, source)
+  if (el === activeVideo()) {
+    loadState.value = 'loading'
+    source.timeout = setTimeout(() => sourceFailed(el, source, '视频加载超时，点击重试'), 15000)
+  }
   if (!isHls(url)) {
     el.src = url
     return
@@ -112,26 +148,26 @@ async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url
     const { video } = await shortVideoApi.show(id)
     if (streams.get(el) !== source) return
     url = video.url
-    if (el.canPlayType('application/vnd.apple.mpegurl')) {
-      el.src = url
-      return
-    }
     const { default: Hls } = await import('hls.js')
     if (streams.get(el) !== source) return
     if (!Hls.isSupported()) {
-      el.src = url
+      if (el.canPlayType('application/vnd.apple.mpegurl')) {
+        el.src = url
+      } else {
+        sourceFailed(el, source, '当前浏览器不支持此视频格式')
+      }
       return
     }
     source.hls = new Hls()
     source.hls.on(Hls.Events.ERROR, (_, error) => {
-      if (error.fatal && el.closest('[data-idx]')?.getAttribute('data-idx') === String(currentIdx.value)) {
-        showToast('视频加载失败')
-      }
+      if (!error.fatal) return
+      const status = error.response?.code
+      sourceFailed(el, source, status ? '视频请求失败（HTTP ' + status + '），点击重试' : '视频加载失败，点击重试')
     })
     source.hls.loadSource(url)
     source.hls.attachMedia(el)
   } catch {
-    if (streams.get(el) === source) showToast('播放器加载失败')
+    sourceFailed(el, source, '获取播放地址失败，点击重试')
   }
 }
 
@@ -144,7 +180,10 @@ const vVideoSource: ObjectDirective<HTMLVideoElement, { id: number; url: string 
 }
 
 watch(currentIdx, () => {
+  loadState.value = 'loading'
   playback.value = { paused: true, current: 0, duration: 0, waiting: false }
+  const el = activeVideo()
+  if (el && el.readyState !== HTMLMediaElement.HAVE_NOTHING) loadState.value = 'ready'
   containerRef.value?.querySelectorAll('video').forEach(v => {
     const idx = Number((v.parentElement as HTMLElement)?.dataset.idx)
     syncVideo(v, idx)
@@ -159,7 +198,12 @@ function activeVideo() {
 
 function togglePlay() {
   const video = activeVideo()
-  if (!video) return
+  const item = currentVideo.value
+  if (!video || !item) return
+  if (loadState.value === 'failed') {
+    void attachSource(video, item)
+    return
+  }
   if (video.paused) {
     void playVideo(video)
   } else {
@@ -243,7 +287,7 @@ onUnmounted(() => observer?.disconnect())
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
-          @loadedmetadata="updatePlayback($event, idx); syncVideo($event.currentTarget as HTMLVideoElement, idx)"
+          @loadedmetadata="mediaReady($event, idx)"
           @durationchange="updatePlayback($event, idx)"
           @timeupdate="updatePlayback($event, idx)"
           @play="updatePlayback($event, idx)"
@@ -251,7 +295,7 @@ onUnmounted(() => observer?.disconnect())
           @waiting="updatePlayback($event, idx)"
           @pause="updatePlayback($event, idx)"
           @ended="updatePlayback($event, idx)"
-          @error="updatePlayback($event, idx)"
+          @error="mediaFailed"
           :poster="mediaUrl(v.cover) || undefined"
           loop
           playsinline
@@ -263,7 +307,16 @@ onUnmounted(() => observer?.disconnect())
 
         <template v-if="idx === currentIdx">
           <button
-            v-if="playback.paused"
+            v-if="loadState === 'failed'"
+            type="button"
+            class="absolute max-w-[80%] rounded-full bg-black/70 px-4 py-3 text-sm"
+            @click.stop="togglePlay"
+          >{{ loadError }}</button>
+          <span v-else-if="loadState === 'loading'" role="status" class="pointer-events-none absolute rounded-full bg-black/60 px-4 py-2 text-sm">
+            正在加载视频…
+          </span>
+          <button
+            v-else-if="playback.paused"
             type="button"
             aria-label="继续播放"
             class="absolute grid h-16 w-16 place-items-center rounded-full bg-black/50 focus-visible:outline focus-visible:outline-2"
