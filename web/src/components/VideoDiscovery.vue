@@ -42,13 +42,30 @@ watch(playerIndex, index => { navigationHidden.value = index !== null }, { flush
 onUnmounted(() => { generation++; navigationHidden.value = false })
 const page = ref(1)
 const more = ref(false)
+const scrollArea = ref<HTMLElement | null>(null)
+const nextPageMarker = ref<HTMLElement | null>(null)
+const autoLoad = typeof IntersectionObserver !== 'undefined'
+watch(nextPageMarker, (marker, _, onCleanup) => {
+  if (!marker) return
+  const observer = new IntersectionObserver(entries => {
+    if (nextPageMarker.value === marker && !loading.value && !error.value && entries.some(entry => entry.isIntersecting)) {
+      void load(true)
+    }
+  }, { root: scrollArea.value, rootMargin: '0px 0px 320px' })
+  observer.observe(marker)
+  onCleanup(() => observer.disconnect())
+}, { flush: 'post' })
 let generation = 0
 const visible = computed(() => videos.value.filter(v => `${v.title} ${v.user?.name ?? ''} ${v.user?.username ?? ''}`.toLowerCase().includes(query.value.trim().toLowerCase())))
 async function load(append = false) {
   const request = ++generation
   loading.value = true
   error.value = ''
-  if (!append) videos.value = []
+  if (!append) {
+    videos.value = []
+    more.value = false
+    if (props.kind === 'short' && scrollArea.value) scrollArea.value.scrollTop = 0
+  }
   const nextPage = append ? page.value + 1 : 1
   try {
     const params = { category_id: selected.value ?? undefined, page: nextPage, per_page: 30 }
@@ -92,14 +109,18 @@ onMounted(() => {
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
     <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
-    <div class="discovery-scroll">
+    <div ref="scrollArea" class="discovery-scroll">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
       <div v-else class="video-grid" :aria-busy="loading" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
         <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
       </div>
-      <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load()">重新加载</button></div>
+      <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(kind === 'short' && videos.length > 0)">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
-      <button v-if="more && !error && !query" class="feed-more" :disabled="loading" @click="load(true)">{{ loading ? '加载中…' : '加载更多' }}</button>
+      <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
+        <p v-if="loading" class="feed-more text-center" role="status">加载中…</p>
+        <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
+      </div>
+      <button v-else-if="(kind === 'long' || !autoLoad) && more && !error && !query" class="feed-more" :disabled="loading" @click="load(true)">{{ loading ? '加载中…' : '加载更多' }}</button>
     </div>
     </div>
     <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="playerIndex = null">
