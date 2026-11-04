@@ -151,7 +151,7 @@ class EfvShortVideoSync
 
     public static function frontendCoverCacheKey(int $video, ?string $origin): string
     {
-        return 'efv:frontend-cover:v3:'.hash('sha256', $video.'|'.$origin);
+        return 'efv:frontend-cover:v4:'.hash('sha256', $video.'|'.$origin);
     }
 
     public function coverCandidates(array $movie): array
@@ -164,7 +164,7 @@ class EfvShortVideoSync
         ])));
     }
 
-    public function downloadCover(array $covers, ?string $imageOrigin, bool $preferFirst = false): ?string
+    public function downloadCover(array $covers, ?string $imageOrigin): ?string
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $failure = null;
@@ -175,9 +175,6 @@ class EfvShortVideoSync
                 $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source) : null;
                 if ($cover && (!$best || $cover['pixels'] > $best['pixels'])) {
                     $best = $cover;
-                    if ($preferFirst) {
-                        break;
-                    }
                 }
             } catch (DomainException $exception) {
                 $failure = $exception;

@@ -49,7 +49,7 @@ class EfvShortVideoCoverController extends Controller
             }
             $movie = $sync->fetchMovie($id);
 
-            return $sync->downloadCover($sync->coverCandidates($movie), $origin, preferFirst: true);
+            return $sync->downloadCover($sync->coverCandidates($movie), $origin);
         } catch (DomainException) {
             return null;
         }
