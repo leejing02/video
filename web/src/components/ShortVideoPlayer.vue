@@ -19,6 +19,24 @@ const showComments = ref(false)
 const commentText = ref('')
 const comments = ref<ShortVideoComment[]>([])
 const isSending = ref(false)
+const playback = ref({ paused: true, current: 0, duration: 0, waiting: false })
+
+function updatePlayback(event: Event, idx: number) {
+  if (idx !== currentIdx.value) return
+  const video = event.currentTarget as HTMLVideoElement
+  playback.value = {
+    paused: video.paused,
+    current: video.currentTime,
+    duration: Number.isFinite(video.duration) ? video.duration : 0,
+    waiting: !video.paused && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA,
+  }
+}
+
+function formatTime(seconds: number) {
+  const whole = Math.floor(seconds)
+  return String(Math.floor(whole / 60)).padStart(2, '0') + ':' + String(whole % 60).padStart(2, '0')
+}
+
 
 const NEAR = 2
 
@@ -46,7 +64,11 @@ function syncVideo(el: HTMLVideoElement | null, idx: number) {
   if (!el) return
   if (idx === currentIdx.value) {
     el.muted = false
-    el.play().catch(() => { el.muted = true; el.play().catch(() => {}) })
+    el.play().catch(() => {
+      if (idx !== currentIdx.value || !el.isConnected) return
+      el.muted = true
+      el.play().catch(() => {})
+    })
   } else {
     el.pause()
     try { el.currentTime = 0 } catch {}
@@ -100,6 +122,7 @@ const vVideoSource: ObjectDirective<HTMLVideoElement, string> = {
 }
 
 watch(currentIdx, () => {
+  playback.value = { paused: true, current: 0, duration: 0, waiting: false }
   containerRef.value?.querySelectorAll('video').forEach(v => {
     const idx = Number((v.parentElement as HTMLElement)?.dataset.idx)
     syncVideo(v, idx)
@@ -108,10 +131,25 @@ watch(currentIdx, () => {
 
 watch(videos, () => setupObserver())
 
-function togglePlay(e: MouseEvent) {
-  const video = (e.currentTarget as HTMLElement).querySelector('video') as HTMLVideoElement
+function activeVideo() {
+  return containerRef.value?.querySelector<HTMLVideoElement>('[data-idx="' + currentIdx.value + '"] video')
+}
+
+function togglePlay() {
+  const video = activeVideo()
   if (!video) return
-  video.paused ? video.play() : video.pause()
+  if (video.paused) {
+    video.play().catch(() => showToast('暂时无法播放'))
+  } else {
+    video.pause()
+  }
+}
+
+function seek(event: Event) {
+  const video = activeVideo()
+  if (!video || !playback.value.duration) return
+  video.currentTime = (event.currentTarget as HTMLInputElement).valueAsNumber
+  playback.value.current = video.currentTime
 }
 
 async function like(id: number) {
@@ -182,9 +220,16 @@ onUnmounted(() => observer?.disconnect())
       >
         <video
           v-if="isNear(idx)"
-          :ref="el => syncVideo(el as HTMLVideoElement, idx)"
           v-video-source="v.url"
-          @loadedmetadata="syncVideo($event.currentTarget as HTMLVideoElement, idx)"
+          @loadedmetadata="updatePlayback($event, idx); syncVideo($event.currentTarget as HTMLVideoElement, idx)"
+          @durationchange="updatePlayback($event, idx)"
+          @timeupdate="updatePlayback($event, idx)"
+          @play="updatePlayback($event, idx)"
+          @playing="updatePlayback($event, idx)"
+          @waiting="updatePlayback($event, idx)"
+          @pause="updatePlayback($event, idx)"
+          @ended="updatePlayback($event, idx)"
+          @error="updatePlayback($event, idx)"
           :poster="mediaUrl(v.cover) || undefined"
           loop
           playsinline
@@ -193,6 +238,54 @@ onUnmounted(() => observer?.disconnect())
         />
         <img v-else-if="v.cover" :src="mediaUrl(v.cover)" class="h-full w-full object-cover bg-black" loading="lazy" />
         <div v-else class="h-full w-full bg-gradient-to-br from-gray-900 to-black" />
+
+        <template v-if="idx === currentIdx">
+          <button
+            v-if="playback.paused"
+            type="button"
+            aria-label="继续播放"
+            class="absolute grid h-16 w-16 place-items-center rounded-full bg-black/50 focus-visible:outline focus-visible:outline-2"
+            @click.stop="togglePlay"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" class="ml-1 h-9 w-9 fill-current">
+              <path d="M7 3v18l15-9z" />
+            </svg>
+          </button>
+          <span v-else-if="playback.waiting" role="status" class="pointer-events-none absolute rounded-full bg-black/60 px-4 py-2 text-sm">
+            正在缓冲…
+          </span>
+          <div
+            class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/85 to-black/25 px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+            @click.stop
+          >
+            <button
+              type="button"
+              :aria-label="playback.paused ? '播放' : '暂停'"
+              class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black/45 focus-visible:outline focus-visible:outline-2"
+              @click="togglePlay"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-current">
+                <path v-if="playback.paused" d="M7 3v18l15-9z" />
+                <path v-else d="M6 4h4v16H6zm8 0h4v16h-4z" />
+              </svg>
+            </button>
+            <input
+              type="range"
+              aria-label="播放进度"
+              :aria-valuetext="formatTime(playback.current) + ' / ' + formatTime(playback.duration)"
+              :value="playback.current"
+              :max="playback.duration"
+              :disabled="!playback.duration"
+              min="0"
+              step="any"
+              class="h-8 min-w-0 flex-1 cursor-pointer touch-none accent-white disabled:cursor-default disabled:opacity-50"
+              @input="seek"
+            />
+            <span aria-hidden="true" class="shrink-0 text-xs tabular-nums">
+              {{ formatTime(playback.current) }} / {{ formatTime(playback.duration) }}
+            </span>
+          </div>
+        </template>
 
         <!-- Action buttons -->
         <div class="absolute right-3 bottom-32 flex flex-col gap-5 text-white pointer-events-auto">
