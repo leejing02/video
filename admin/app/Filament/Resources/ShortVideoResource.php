@@ -5,6 +5,9 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ShortVideoResource\Pages;
 use App\Models\Category;
 use App\Models\Video;
+use App\Services\EfvShortVideoSync;
+use DomainException;
+use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Tables;
@@ -143,6 +146,30 @@ class ShortVideoResource extends VideoResource
                     ->icon('heroicon-o-play')
                     ->visible(fn (Video $record) => filled($record->url))
                     ->url(fn (Video $r) => $r->url, shouldOpenInNewTab: true),
+                Tables\Actions\Action::make('syncEfv')
+                    ->label('同步 EFV')
+                    ->visible(fn (Video $record) => static::canEdit($record)
+                        && (!filled($record->url) || !filled($record->cover) || str_starts_with((string) $record->cover, 'https://'))
+                        && app(EfvShortVideoSync::class)->movieId($record) !== null)
+                    ->requiresConfirmation()
+                    ->modalDescription('获取这条视频的 EFV 转码结果并发布到前台。')
+                    ->action(function (Video $record) {
+                        abort_unless(static::canEdit($record), 403);
+
+                        try {
+                            $warning = app(EfvShortVideoSync::class)->publish($record);
+                        } catch (DomainException $exception) {
+                            Notification::make()->danger()->title($exception->getMessage())->send();
+
+                            return;
+                        }
+
+                        if ($warning) {
+                            Notification::make()->warning()->title($warning)->send();
+                        } else {
+                            Notification::make()->success()->title('已同步并发布到前台')->send();
+                        }
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])

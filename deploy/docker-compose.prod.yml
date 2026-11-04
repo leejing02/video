@@ -171,6 +171,9 @@ services:
       EFV_UPLOAD_KEY: "${EFV_UPLOAD_KEY:-}"
       EFV_API_KEY: "${EFV_API_KEY:-}"
       EFV_API_SECRET: "${EFV_API_SECRET:-}"
+      EFV_IMAGE_AES_KEY: "${EFV_IMAGE_AES_KEY:-}"
+      EFV_IMAGE_AES_IV: "${EFV_IMAGE_AES_IV:-}"
+      EFV_IMAGE_AES_CIPHER: "${EFV_IMAGE_AES_CIPHER:-aes-256-ctr}"
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: "3306"

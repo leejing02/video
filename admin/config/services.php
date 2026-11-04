@@ -19,6 +19,9 @@ return [
         'upload_key' => env('EFV_UPLOAD_KEY'),
         'api_key' => env('EFV_API_KEY'),
         'api_secret' => env('EFV_API_SECRET'),
+        'image_aes_key' => env('EFV_IMAGE_AES_KEY'),
+        'image_aes_iv' => env('EFV_IMAGE_AES_IV'),
+        'image_aes_cipher' => env('EFV_IMAGE_AES_CIPHER', 'aes-256-ctr'),
     ],
 
     'postmark' => [

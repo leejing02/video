@@ -36,7 +36,7 @@ class EditShortVideo extends EditRecord
                     abort_unless(ShortVideoResource::canEdit($this->getRecord()), 403);
 
                     try {
-                        app(EfvShortVideoSync::class)->publish($this->getRecord());
+                        $warning = app(EfvShortVideoSync::class)->publish($this->getRecord());
                     } catch (DomainException $exception) {
                         Notification::make()->danger()->title($exception->getMessage())->send();
 
@@ -44,7 +44,11 @@ class EditShortVideo extends EditRecord
                     }
 
                     $this->refreshFormData(['url', 'cover', 'duration', 'status', 'published_at']);
-                    Notification::make()->success()->title('已同步并发布到前台')->send();
+                    if ($warning) {
+                        Notification::make()->warning()->title($warning)->send();
+                    } else {
+                        Notification::make()->success()->title('已同步并发布到前台')->send();
+                    }
                 }),
             Actions\DeleteAction::make(),
         ];

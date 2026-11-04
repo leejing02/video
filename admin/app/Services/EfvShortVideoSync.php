@@ -6,6 +6,8 @@ use App\Models\Video;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use DomainException;
 
 class EfvShortVideoSync
@@ -28,7 +30,7 @@ class EfvShortVideoSync
         return null;
     }
 
-    public function publish(Video $video): void
+    public function publish(Video $video): ?string
     {
         $id = $this->movieId($video);
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
@@ -62,8 +64,20 @@ class EfvShortVideoSync
             throw new DomainException('EFV 已返回视频信息，但没有可用的 M3U8 地址。');
         }
 
-        $cover = $this->mediaUrl($endpoint, $movie['poster'] ?? null)
-            ?? $this->mediaUrl($endpoint, data_get($movie, 'poster2.url'));
+        $covers = array_values(array_unique(array_filter([
+            $this->mediaUrl($endpoint, $movie['poster'] ?? null),
+            $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
+        ])));
+        $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
+        $cover = null;
+        if ($replaceCover) {
+            foreach ($covers as $candidate) {
+                $cover = $this->storeCover($endpoint, $candidate);
+                if ($cover) {
+                    break;
+                }
+            }
+        }
         $time = (string) ($movie['time'] ?? '');
         $duration = 0;
         if (preg_match('/^(\d{1,4}):([0-5]\d):([0-5]\d)(?:\.\d+)?$/D', $time, $parts)) {
@@ -72,17 +86,88 @@ class EfvShortVideoSync
             $duration = (int) ceil((float) $time);
         }
 
-        DB::transaction(function () use ($video, $url, $cover, $duration) {
+        DB::transaction(function () use ($video, $url, $cover, $covers, $duration) {
             $record = $video->newQuery()->lockForUpdate()->findOrFail($video->getKey());
             $record->update([
                 'url' => $url,
-                'cover' => $record->cover ?: $cover,
+                'cover' => $cover && (!$record->cover || in_array($record->cover, $covers, true)) ? $cover : $record->cover,
                 'duration' => $duration ?: $record->duration,
                 'status' => Video::STATUS_PUBLISHED,
                 'published_at' => $record->published_at ?? now(),
             ]);
         });
         $video->refresh();
+
+        return $replaceCover && !$cover
+            ? '视频已发布，封面同步失败。请检查 EFV 图片加密配置和封面地址后重试。'
+            : null;
+    }
+
+    private function storeCover(string $endpoint, string $url): ?string
+    {
+        if (!preg_match('/\.(?:jpe?g|png|webp|gif)$/iD', (string) parse_url($url, PHP_URL_PATH))) {
+            return null;
+        }
+
+        foreach (['host', 'port'] as $part) {
+            if ((parse_url($url)[$part] ?? null) !== (parse_url($endpoint)[$part] ?? null)) {
+                return null;
+            }
+        }
+
+        try {
+            $response = Http::withoutRedirecting()->connectTimeout(4)->timeout(8)
+                ->withOptions(['stream' => true])->get($url);
+            $stream = $response->toPsrResponse()->getBody();
+            try {
+                if (!$response->successful()) {
+                    return null;
+                }
+                $bytes = '';
+                while (!$stream->eof() && strlen($bytes) <= 5 * 1024 * 1024) {
+                    $chunk = $stream->read(65536);
+                    if ($chunk === '') {
+                        break;
+                    }
+                    $bytes .= $chunk;
+                }
+            } finally {
+                $stream->close();
+            }
+        } catch (ConnectionException | RuntimeException) {
+            return null;
+        }
+
+        if (!$bytes || strlen($bytes) > 5 * 1024 * 1024) {
+            return null;
+        }
+        if (strtolower($response->header('X-Encode-Mode')) === 'aes') {
+            $cipher = config('services.efv.image_aes_cipher');
+            $key = (string) config('services.efv.image_aes_key');
+            $iv = (string) config('services.efv.image_aes_iv');
+            $lengths = ['aes-128-ctr' => 32, 'aes-128-cbc' => 32, 'aes-256-ctr' => 64, 'aes-256-cbc' => 64];
+            if (!isset($lengths[$cipher]) || strlen($key) !== $lengths[$cipher]
+                || strlen($iv) !== 32 || !ctype_xdigit($key.$iv)) {
+                return null;
+            }
+            $bytes = openssl_decrypt($bytes, $cipher, hex2bin($key), OPENSSL_RAW_DATA, hex2bin($iv));
+        }
+
+        $image = $bytes ? @getimagesizefromstring($bytes) : false;
+        $extension = match ($image[2] ?? null) {
+            IMAGETYPE_WEBP => 'webp',
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG => 'png',
+            IMAGETYPE_GIF => 'gif',
+            default => null,
+        };
+        if (!$extension) {
+            return null;
+        }
+
+        $path = 'shorts/covers/efv-'.hash('sha256', $bytes).'.'.$extension;
+
+        return Storage::disk('public')->put($path, $bytes) ? $path : null;
     }
 
     private function mediaUrl(string $endpoint, mixed $value): ?string
