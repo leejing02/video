@@ -17,7 +17,7 @@ class EfvShortVideoCoverController extends Controller
             ->where('status', Video::STATUS_PUBLISHED)->findOrFail($video);
 
         $origin = $domains->read()['image_origin'];
-        $cacheKey = 'efv:frontend-cover:'.hash('sha256', $video.'|'.$origin);
+        $cacheKey = EfvShortVideoSync::frontendCoverCacheKey($video, $origin);
         $cover = Cache::get($cacheKey);
         if ($cover === null) {
             $lock = Cache::lock($cacheKey.':lock', 40);

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Video;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -99,12 +100,13 @@ class EfvShortVideoSync
         }
 
         $covers = $this->coverCandidates($movie);
-        $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
+        $imageOrigin = app(EfvMediaDomains::class)->read()['image_origin'];
+        $replaceCover = $this->canReplaceCover($video, $covers, $automatic);
         $cover = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
             try {
-                $cover = $this->downloadCover($covers, app(EfvMediaDomains::class)->read()['image_origin']);
+                $cover = $this->downloadCover($covers, $imageOrigin);
             } catch (DomainException $exception) {
                 $coverFailure = $exception->getMessage();
             }
@@ -125,17 +127,31 @@ class EfvShortVideoSync
 
             $record->update([
                 'url' => $automatic && filled($record->url) ? $record->url : $url,
-                'cover' => $cover && (!$record->cover || in_array($record->cover, $covers, true)) ? $cover : $record->cover,
+                'cover' => $cover && $this->canReplaceCover($record, $covers, $automatic) ? $cover : $record->cover,
                 'duration' => $duration ?: $record->duration,
                 'status' => Video::STATUS_PUBLISHED,
                 'published_at' => $record->published_at ?? now(),
             ]);
         });
         $video->refresh();
+        if (!$automatic && $cover && $video->cover === $cover) {
+            Cache::forget(self::frontendCoverCacheKey($video->id, $imageOrigin));
+        }
 
         return $replaceCover && !$cover
             ? $coverFailure
             : null;
+    }
+
+    private function canReplaceCover(Video $video, array $covers, bool $automatic): bool
+    {
+        return !$video->cover || in_array($video->cover, $covers, true)
+            || (!$automatic && str_starts_with($video->cover, 'shorts/covers/efv-'));
+    }
+
+    public static function frontendCoverCacheKey(int $video, ?string $origin): string
+    {
+        return 'efv:frontend-cover:v2:'.hash('sha256', $video.'|'.$origin);
     }
 
     public function coverCandidates(array $movie): array
@@ -152,16 +168,23 @@ class EfvShortVideoSync
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $failure = null;
+        $best = null;
         foreach ($covers as $candidate) {
             try {
                 $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
-                $cover = $source ? $this->storeCover($imageOrigin ?? $endpoint, $source) : null;
-                if ($cover) {
-                    return $cover;
+                $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source) : null;
+                if ($cover && (!$best || $cover['pixels'] > $best['pixels'])) {
+                    $best = $cover;
                 }
             } catch (DomainException $exception) {
                 $failure = $exception;
             }
+        }
+
+        if ($best) {
+            $path = 'shorts/covers/efv-'.hash('sha256', $best['bytes']).'.'.$best['extension'];
+
+            return Storage::disk('public')->put($path, $best['bytes']) ? $path : null;
         }
 
         if ($failure) {
@@ -185,7 +208,7 @@ class EfvShortVideoSync
         return $imageOrigin.$parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
-    private function storeCover(string $endpoint, string $url): ?string
+    private function fetchCover(string $endpoint, string $url): ?array
     {
         if (!preg_match('/\.(?:jpe?g|png|webp|gif)$/iD', (string) parse_url($url, PHP_URL_PATH))) {
             return null;
@@ -251,9 +274,7 @@ class EfvShortVideoSync
             throw new DomainException('EFV 封面内容无效，请检查图片响应和加密设置。');
         }
 
-        $path = 'shorts/covers/efv-'.hash('sha256', $bytes).'.'.$extension;
-
-        return Storage::disk('public')->put($path, $bytes) ? $path : null;
+        return ['bytes' => $bytes, 'extension' => $extension, 'pixels' => $image[0] * $image[1]];
     }
 
     private function mediaUrl(string $endpoint, mixed $value): ?string
