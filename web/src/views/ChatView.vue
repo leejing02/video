@@ -34,6 +34,50 @@ const messages = computed(() => selected.value === null ? [] : cache.value[selec
 const filtered = computed(() => rooms.value.filter(item => item.name.toLowerCase().includes(query.value.toLowerCase()) && (filter.value === 'all' || (filter.value === 'direct' ? item.kind === 'direct' : item.kind !== 'direct'))).sort((a,b) => (Date.parse(b.last_message_at ?? '') || 0) - (Date.parse(a.last_message_at ?? '') || 0)))
 const totalUnread = computed(() => rooms.value.reduce((sum, item) => sum + item.unread_count, 0))
 
+let backSwipe: { id: number; x: number; y: number } | undefined
+
+function cancelBackSwipe() {
+  backSwipe = undefined
+}
+
+function returnToConversations() {
+  cancelBackSwipe()
+  mobileOpen.value = false
+}
+
+function startBackSwipe(event: TouchEvent) {
+  cancelBackSwipe()
+  if (!mobileOpen.value || !window.matchMedia('(max-width: 700px)').matches || event.touches.length !== 1) return
+  if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return
+  const touch = event.touches[0]
+  if (touch.clientX <= 32) backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY }
+}
+
+function moveBackSwipe(event: TouchEvent) {
+  const start = backSwipe
+  if (!start) return
+  const touch = event.touches[0]
+  if (event.touches.length !== 1 || touch.identifier !== start.id) {
+    cancelBackSwipe()
+    return
+  }
+  const dx = touch.clientX - start.x
+  const dy = Math.abs(touch.clientY - start.y)
+  if (dy > 12 && dy >= dx) cancelBackSwipe()
+  else if (dx > 8 && dx > dy && event.cancelable) event.preventDefault()
+}
+
+function endBackSwipe(event: TouchEvent) {
+  const start = backSwipe
+  cancelBackSwipe()
+  if (!start) return
+  const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id)
+  if (!touch) return
+  const dx = touch.clientX - start.x
+  const dy = Math.abs(touch.clientY - start.y)
+  if (dx >= 64 && dx > dy * 1.5) returnToConversations()
+}
+
 function merge(id: number, incoming: Message[]) {
   const values = new Map((cache.value[id] ?? []).map(item => [item.id, item]))
   for (const item of incoming) if (item.chat_room_id === id) values.set(item.id, item)
@@ -170,9 +214,9 @@ onUnmounted(() => { chatDetailOpen.value = false; disposed = true; selectionVers
         <div v-if="!filtered.length" class="chat-placeholder"><span>✉</span><p>暂无{{ filter === 'direct' ? '私聊' : '会话' }}</p><small>在群聊中点击成员头像，即可发起私聊</small></div>
       </div>
     </aside>
-    <section class="conversation-detail">
+    <section class="conversation-detail" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
       <template v-if="room">
-        <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="mobileOpen = false">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
+        <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="returnToConversations">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
         <div v-if="error" class="chat-error" role="alert">{{ error }}<button @click="error = ''">关闭</button></div>
         <div ref="scrollEl" class="message-timeline">
           <div class="timeline-label">{{ room.kind === 'direct' ? '你们的对话，从这里开始' : '一起聊聊新鲜事' }}</div>
