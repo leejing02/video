@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, inject, watch, ref, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
 import { useRouter } from 'vue-router'
 import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
@@ -8,6 +8,23 @@ import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
 import ShortVideoPlayer from './ShortVideoPlayer.vue'
+
+// Each tile spans enough small grid rows for its measured height and gutter.
+const masonryObserver = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const tile = entry.target as HTMLElement
+    tile.style.gridRowEnd = 'span ' + Math.ceil((tile.offsetHeight + 6) / 2)
+  }
+})
+const vMasonryTile: ObjectDirective<HTMLElement, boolean> = {
+  mounted(el, { value }) {
+    if (value) masonryObserver.observe(el)
+  },
+  beforeUnmount(el) {
+    masonryObserver.unobserve(el)
+  },
+}
+onUnmounted(() => masonryObserver.disconnect())
 
 const props = defineProps<{ kind: 'short' | 'long' }>()
 const router = useRouter()
@@ -77,8 +94,8 @@ onMounted(() => {
     <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
     <div class="discovery-scroll">
       <div v-if="loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <div v-else class="video-grid" :class="{ 'long-grid': kind === 'long' }">
-        <VideoCard v-for="video in visible" :key="video.id" :video="video" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
+      <div v-else class="video-grid" :class="kind === 'short' ? 'short-masonry' : 'long-grid'">
+        <VideoCard v-for="video in visible" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @click="open(video)" />
       </div>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load()">重新加载</button></div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
