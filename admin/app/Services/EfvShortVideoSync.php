@@ -80,6 +80,12 @@ class EfvShortVideoSync
             throw new DomainException('EFV 尚未返回该视频的转码结果，请检查 EFV 视频状态和查询配置。');
         }
 
+        return $this->applyTranscodedMovie($video, $movie, $automatic);
+    }
+
+    public function applyTranscodedMovie(Video $video, array $movie, bool $automatic = false): ?string
+    {
+        $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $url = collect($movie['m3u8paths'] ?? [])->sortByDesc('hd')
             ->map(fn ($stream) => $this->mediaUrl($endpoint, $stream['path'] ?? null))
             ->first(fn ($url) => $url && str_ends_with(strtolower((string) parse_url($url, PHP_URL_PATH)), '.m3u8'));

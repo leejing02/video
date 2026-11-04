@@ -40,3 +40,21 @@ Artisan::command('efv:sync-short-videos', function () {
 Schedule::command('efv:sync-short-videos')
     ->everyMinute()
     ->withoutOverlapping(5);
+
+Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入}', function () {
+    try {
+        $stats = app(\App\Services\EfvShortVideoImport::class)->run(
+            app(EfvShortVideoSync::class),
+            (bool) $this->option('preview'),
+            fn ($page, $pages, $stats) => $this->line("已扫描 {$page}/{$pages} 页，新增候选 {$stats['eligible']}，已发布 {$stats['published']}"),
+        );
+    } catch (DomainException $exception) {
+        $this->error($exception->getMessage());
+
+        return 1;
+    }
+
+    $this->info("新增候选 {$stats['eligible']}，已有 {$stats['existing']}，已发布 {$stats['published']}，待同步 {$stats['pending']}，待补封面 {$stats['missing_cover']}。");
+
+    return 0;
+})->purpose('导入 EFV 国产短视频分类');
