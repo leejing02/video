@@ -29,7 +29,7 @@
                 try {
                     for (const [order, entry] of this.files.entries()) {
                         if (entry.done) continue;
-                        const limit = /\.(jpe?g|png|webp)$/i.test(entry.file.name) ? 15 : 45;
+                        const limit = 45;
                         if (!entry.file.size || entry.file.size > limit * 1024 * 1024) {
                             entry.status = '文件为空或超过 ' + limit + ' MB，请清空后重新选择';
                             continue;
@@ -98,23 +98,23 @@
             }
         }" action="{{ route('admin.efv-gallery.chunk') }}" novalidate x-on:submit.prevent="upload" class="space-y-5">
             <input type="hidden" x-ref="csrf" value="{{ csrf_token() }}">
-            <p>每批文件进入同一个 EFV 合集。视频提交后由 EFV 转码。</p>
+            <p>视频提交至 EFV「新-短视频」分类。转码完成后自动同步到本站所选分类。</p>
             <div>
                 <label for="gallery-category" class="block font-medium">所属分类</label>
                 <x-filament::input.wrapper>
                     <x-filament::input.select id="gallery-category" x-model="category" x-bind:disabled="!!batch" required>
                         <option value="">请选择短视频分类</option>
                         @foreach ($categories as $category)
-                            <option value="{{ $category->id }}">{{ $category->name }} · {{ $category->efv_section === 'chigua' ? '吃瓜' : '图集' }}</option>
+                            <option value="{{ $category->id }}">{{ $category->name }}</option>
                         @endforeach
                     </x-filament::input.select>
                 </x-filament::input.wrapper>
             </div>
             <div>
-                <label for="gallery-files" class="block font-medium">图片和视频</label>
+                <label for="gallery-files" class="block font-medium">视频文件</label>
                 <input id="gallery-files" type="file" x-ref="files" x-on:change="add" x-bind:disabled="!!batch"
-                    accept="image/jpeg,image/png,image/webp,.mp4,.mkv,.avi,.dat,.mpg,.rmvb,.rm,.flv,.mpeg,.mov,.wmv,.vob,.asf,.ts" multiple>
-                <p class="text-sm">可分批选择，最多 100 个文件。图片限 15 MB，视频限 45 MB。</p>
+                    accept=".mp4,.mkv,.avi,.dat,.mpg,.rmvb,.rm,.flv,.mpeg,.mov,.wmv,.vob,.asf,.ts" multiple>
+                <p class="text-sm">可分批选择，最多 100 个文件。单个视频限 45 MB。</p>
                 <p role="alert" x-text="selectionError"></p>
             </div>
             <ol aria-live="polite" class="space-y-1">

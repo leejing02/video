@@ -14,7 +14,7 @@ class UploadGallery extends Page
 
     protected static string $view = 'filament.short-videos.upload-gallery';
 
-    protected static ?string $title = '批量上传图片和视频';
+    protected static ?string $title = '批量上传短视频';
 
     public static function canAccess(array $parameters = []): bool
     {
@@ -31,7 +31,7 @@ class UploadGallery extends Page
     protected function getViewData(): array
     {
         return ['categories' => Category::query()->where('type', Category::TYPE_SHORT)
-            ->where('is_active', true)->orderBy('sort')->get(['id', 'name', 'efv_section']),
+            ->where('is_active', true)->orderBy('sort')->get(['id', 'name']),
         ];
     }
 }

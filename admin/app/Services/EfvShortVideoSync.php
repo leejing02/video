@@ -29,10 +29,10 @@ class EfvShortVideoSync
 
     public function linkedMovies(): iterable
     {
-        foreach (DB::table('efv_gallery_batches')->whereNotNull('group_id')->whereNotNull('files')->cursor() as $batch) {
+        foreach (DB::table('efv_gallery_batches')->whereNotNull('files')->cursor() as $batch) {
             foreach (json_decode($batch->files, true) ?? [] as $order => $entry) {
                 $videoId = (int) ($entry['video_id'] ?? 0);
-                $id = $entry['efv_id'] ?? substr(hash('sha256', $batch->group_id.':'.$order), 0, 24);
+                $id = $entry['efv_id'] ?? ($batch->group_id ? substr(hash('sha256', $batch->group_id.':'.$order), 0, 24) : null);
                 if ($videoId > 0 && is_string($id) && preg_match('/^[a-f0-9]{24}$/iD', $id)) {
                     yield $videoId => $id;
                 }

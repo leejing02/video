@@ -3,10 +3,12 @@
         <x-filament::section>
             <x-slot name="heading">
                 {{ $batch->category_name ?? '分类 #' . $batch->category_id }}
-                · {{ $batch->section === 'chigua' ? '吃瓜' : '图集' }}
+                · {{ match ($batch->section) { 'short' => '新-短视频', 'chigua' => '旧版吃瓜', default => '旧版图集' } }}
                 · {{ $batch->created_at }}
             </x-slot>
-            <p>EFV 合集 ID：{{ $batch->group_id ?? '尚未取得' }}</p>
+            @if ($batch->section !== 'short')
+                <p>EFV 合集 ID：{{ $batch->group_id ?? '尚未取得' }}</p>
+            @endif
             @if ($batch->group_id)
                 <x-filament::button type="button" wire:click="mountAction('importVideos', {{ \Illuminate\Support\Js::from(['batch' => $batch->id]) }})">
                     补录到短视频
@@ -16,7 +18,7 @@
                 @forelse (json_decode($batch->files ?? '[]', true) as $file)
                     <li>{{ $file['name'] }} · {{ $file['status'] }}</li>
                 @empty
-                    <li>暂无本地文件明细。旧版仅保存合集批次。</li>
+                    <li>暂无本地文件明细。</li>
                 @endforelse
             </ul>
         </x-filament::section>

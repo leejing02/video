@@ -122,84 +122,65 @@ class EfvGalleryUploadController extends Controller
         $category = Category::query()->where('type', Category::TYPE_SHORT)
             ->where('is_active', true)->findOrFail($data['category']);
         $extension = strtolower($file->getClientOriginalExtension());
-        $image = in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true);
-        if ($image) {
-            $info = @getimagesize($file->getPathname());
-            abort_unless($file->getSize() <= 15 * 1024 * 1024
-                && in_array($info['mime'] ?? '', ['image/jpeg', 'image/png', 'image/webp'], true), 422, '请上传 15 MB 以内的 JPG、PNG 或 WebP 图片');
-        } else {
-            abort_unless(in_array($extension, ['mp4', 'mkv', 'avi', 'dat', 'mpg', 'rmvb', 'rm', 'flv', 'mpeg', 'mov', 'wmv', 'vob', 'asf', 'ts'], true), 422, '不支持此视频格式');
-        }
+        abort_unless(in_array($extension, ['mp4', 'mkv', 'avi', 'dat', 'mpg', 'rmvb', 'rm', 'flv', 'mpeg', 'mov', 'wmv', 'vob', 'asf', 'ts'], true), 422, '不支持此视频格式');
 
         $config = config('services.efv');
         $base = rtrim($config['endpoint'], '/');
         abort_unless(parse_url($base, PHP_URL_SCHEME) === 'https', 503, 'EFV_ENDPOINT 必须使用 HTTPS');
-        $missing = [];
-        foreach (['upload_key', 'api_key', 'api_secret'] as $key) {
-            if (trim((string) $config[$key]) === '') {
-                $missing[] = 'EFV_'.strtoupper($key);
-            }
-        }
-        abort_if($missing, 503, '后台容器未读取到 '.implode('、', $missing));
+        abort_if(blank($config['upload_key']), 503, '后台容器未读取到 EFV_UPLOAD_KEY');
         $http = Http::baseUrl($base)->acceptJson()->connectTimeout(5)->withoutRedirecting();
         $batch = strtolower($data['batch']);
         $batches = DB::table('efv_gallery_batches');
         $lock = Cache::lock('efv-gallery:'.$batch, 55);
         abort_unless($lock->get(), 409, '这一批文件正在上传，请稍后重试');
 
-        $stage = '创建合集';
         try {
             $batches->insertOrIgnore([
                 'id' => $batch, 'admin_id' => $adminId,
-                'category_id' => $category->getKey(), 'section' => $category->efv_section,
+                'category_id' => $category->getKey(), 'section' => 'short',
                 'created_at' => now(),
             ]);
             $record = $batches->where('id', $batch)->first();
             abort_unless($record && (int) $record->admin_id === $adminId, 403);
             abort_unless((int) $record->category_id === (int) $category->getKey(), 409, '该批次已锁定分类');
-            $section = $record->section;
-            abort_unless(in_array($section, ['gallery', 'chigua'], true), 422, 'EFV 栏目设置无效');
-            $group = $record->group_id;
-            if (!$group) {
-                $response = (clone $http)->timeout(8)->withHeaders([
-                    'apikey' => $config['api_key'], 'apisecret' => $config['api_secret'],
-                ])->post('/api/gallerymanage', ['action' => 'create', 'caption' => '', 'section' => $section]);
-                $group = $response->json('id');
-                abort_unless($response->successful() && $response->json('success')
-                    && $response->json('section') === $section && is_string($group)
-                    && preg_match('/^[a-f0-9]{24}$/i', $group), 502, $this->efvFailure('创建合集', $response, $config));
-                $batches->where('id', $batch)->update(['group_id' => $group]);
-            }
+            abort_unless($record->section === 'short', 409, '这是旧图集批次，请清空后重新选择视频');
 
-            $stage = $image ? '提交图片' : '提交视频';
-            $item = substr(hash('sha256', $group.':'.$data['order']), 0, 24);
-            $stream = fopen($file->getPathname(), 'rb');
-            abort_unless($stream, 422, '无法读取上传文件');
-            try {
-                $response = $http->timeout(40)->withHeaders(['token' => $config['upload_key']])
-                    ->attach('file', $stream, $item.'.'.$extension)
-                    ->post($image ? '/api/galleryimageupload' : '/api/simpleupload', [
-                        'originalname' => $file->getClientOriginalName(),
-                        'category' => '图集',
-                        'galleryGroup' => $group,
-                        'galleryGroupOrder' => (string) $data['order'],
-                        'galleryItem' => $item,
-                        'gallerySection' => $section,
-                    ]);
-            } finally {
-                if (is_resource($stream)) {
+            $files = json_decode($record->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
+            $order = (int) $data['order'];
+            $entry = $files[$order] ?? [];
+            abort_if(isset($entry['name']) && $entry['name'] !== $file->getClientOriginalName(), 409, '该位置已关联其他文件，请新建批次');
+            if (empty($entry['efv_id'])) {
+                $stream = fopen($file->getPathname(), 'rb');
+                abort_unless($stream, 422, '无法读取上传文件');
+                try {
+                    $response = $http->timeout(40)->withHeaders(['token' => $config['upload_key']])
+                        ->attach('file', $stream, $file->getClientOriginalName())
+                        ->post('/api/simpleupload', [
+                            'originalname' => $file->getClientOriginalName(),
+                            'category' => '新-短视频',
+                            'clientId' => $batch.':'.$order,
+                        ]);
+                } finally {
                     fclose($stream);
                 }
+
+                $id = $response->json('id');
+                abort_unless($response->successful() && $response->json('success')
+                    && is_string($id) && preg_match('/^[a-f0-9]{24}$/iD', $id), 502, $this->efvFailure('提交视频', $response, $config));
+                $entry = [
+                    'name' => $file->getClientOriginalName(),
+                    'status' => '视频已提交转码，等待创建本地草稿',
+                    'efv_id' => $id,
+                ];
+                $files[$order] = $entry;
+                $batches->where('id', $batch)->update([
+                    'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
+                ]);
             }
 
-            abort_unless($response->successful() && $response->json('success'), 502, $this->efvFailure($stage, $response, $config));
-            $files = json_decode($record->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
-            $entry = $files[$data['order']] ?? [];
-            DB::transaction(function () use (&$entry, $files, $data, $batches, $batch, $image, $file, $category) {
-                $entry['name'] = $file->getClientOriginalName();
-                $entry['status'] = $image ? '图片已加入图集' : '视频已提交转码，已创建本地草稿';
-                if (!$image && empty($entry['video_id'])) {
-                    $title = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            if (empty($entry['video_id'])) {
+                $entry = DB::transaction(function () use ($entry, $files, $order, $batches, $batch, $category) {
+                    $title = pathinfo($entry['name'], PATHINFO_FILENAME);
                     $video = Video::create([
                         'user_id' => User::adminUploadOwner()->id,
                         'category_id' => $category->getKey(),
@@ -209,17 +190,20 @@ class EfvGalleryUploadController extends Controller
                         'status' => Video::STATUS_DRAFT,
                     ]);
                     $entry['video_id'] = $video->getKey();
-                }
-                $files[$data['order']] = $entry;
-                ksort($files);
-                $batches->where('id', $batch)->update([
-                    'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
-                ]);
-            });
+                    $entry['status'] = '视频已提交转码，已创建本地草稿';
+                    $files[$order] = $entry;
+                    ksort($files);
+                    $batches->where('id', $batch)->update([
+                        'files' => json_encode($files, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE),
+                    ]);
+
+                    return $entry;
+                });
+            }
 
             return response()->json(['message' => $entry['status'], 'video_id' => $entry['video_id'] ?? null]);
         } catch (ConnectionException) {
-            abort(502, 'EFV '.$stage.'时连接失败或超时，可重试当前文件');
+            abort(502, 'EFV 提交视频时连接失败或超时，请先检查 EFV 视频库是否已收到文件');
         } finally {
             $lock->release();
         }
@@ -231,7 +215,7 @@ class EfvGalleryUploadController extends Controller
         $detail = '';
         if (is_string($message)) {
             $detail = strip_tags($message);
-            $detail = str_replace([$config['upload_key'], $config['api_key'], $config['api_secret']], '[隐藏]', $detail);
+            $detail = str_replace(array_filter([$config['upload_key'], $config['api_key'], $config['api_secret']]), '[隐藏]', $detail);
             $detail = trim(preg_replace('/\s+/u', ' ', $detail) ?? '');
         }
 
