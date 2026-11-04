@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourname/video-api/internal/middleware"
@@ -31,6 +30,11 @@ func (h *ShortVideoHandler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.Header("Cache-Control", "no-store")
+	target := readEFVM3U8Origin(efvMediaFile)
+	for i := range list {
+		h.applyMediaDomain(&list[i], target, false)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"data":     list,
 		"total":    total,
@@ -50,10 +54,8 @@ func (h *ShortVideoHandler) Show(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	if signed := signEFVPlayback(v.URL, h.EFVEndpoint, h.EFVPlaybackKey, time.Now()); signed != v.URL {
-		c.Header("Cache-Control", "private, no-store")
-		v.URL = signed
-	}
+	c.Header("Cache-Control", "private, no-store")
+	h.applyMediaDomain(v, readEFVM3U8Origin(efvMediaFile), true)
 	_ = h.Repo.IncrementViews(id)
 
 	liked := false
@@ -175,6 +177,11 @@ func (h *ShortVideoHandler) Mine(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	target := readEFVM3U8Origin(efvMediaFile)
+	for i := range list {
+		h.applyMediaDomain(&list[i], target, false)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": list, "total": total, "page": page, "per_page": per})
 }

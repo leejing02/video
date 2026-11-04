@@ -97,13 +97,15 @@ class EfvShortVideoSync
             $this->mediaUrl($endpoint, $movie['poster'] ?? null),
             $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
         ])));
+        $imageOrigin = $this->imageOrigin();
         $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
         $cover = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
             foreach ($covers as $candidate) {
                 try {
-                    $cover = $this->storeCover($endpoint, $candidate);
+                    $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
+                    $cover = $source ? $this->storeCover($imageOrigin ?? $endpoint, $source) : null;
                     if ($cover) {
                         break;
                     }
@@ -139,6 +141,34 @@ class EfvShortVideoSync
         return $replaceCover && !$cover
             ? $coverFailure
             : null;
+    }
+
+    private function imageOrigin(): ?string
+    {
+        $json = @file_get_contents('/etc/video/efv-media/domains.json');
+        $origin = $json === false ? null : (json_decode($json, true)['image_origin'] ?? null);
+        $parts = is_string($origin) ? parse_url($origin) : [];
+        if (($parts['scheme'] ?? null) !== 'https' || empty($parts['host']) || isset($parts['user'])
+            || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+            || !in_array($parts['path'] ?? '', ['', '/'], true)) {
+            return null;
+        }
+
+        return rtrim($origin, '/');
+    }
+
+    private function coverSource(string $endpoint, string $url, ?string $imageOrigin): ?string
+    {
+        if (!$imageOrigin) {
+            return $url;
+        }
+        $parts = parse_url($url);
+        $origin = 'https://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        if (!in_array($origin, [$endpoint, $imageOrigin], true) || empty($parts['path'])) {
+            return null;
+        }
+
+        return $imageOrigin.$parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
     private function storeCover(string $endpoint, string $url): ?string

@@ -140,6 +140,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    volumes:
+      - ./deploy/efv-media:/etc/video/efv-media:ro
     expose:
       - "8000"
     healthcheck:
@@ -197,6 +199,7 @@ services:
         condition: service_healthy
     volumes:
       - admin_storage:/var/www/html/storage
+      - ./deploy/efv-media:/etc/video/efv-media:ro
     expose:
       - "80"
     healthcheck:
