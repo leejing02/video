@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
 import { useRouter } from 'vue-router'
 import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
@@ -33,6 +33,7 @@ const router = useRouter()
 const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
 const categories = ref<(Category | ShortCategory)[]>([])
 const selected = ref<number | null>(null)
+const displayedCategory = ref<number | null>(null)
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
 const pendingEntryCovers = ref(new Set<number>())
@@ -88,17 +89,26 @@ function showStagedGrid() {
   videos.value = incoming.items
   eagerCoverIds.value = incoming.coverIds
   displayedGrid.value = incoming.key
+  displayedCategory.value = selected.value
   page.value = 1
   more.value = incoming.more
   staged.value = undefined
   pendingEntryCovers.value.clear()
   loading.value = false
-  if (scrollArea.value) scrollArea.value.scrollTop = 0
+  void nextTick(() => {
+    if (displayedGrid.value === incoming.key && scrollArea.value) scrollArea.value.scrollTop = 0
+  })
 }
 function coverSettled(grid: number, id: number) {
   if (staged.value?.key !== grid) return
   pendingEntryCovers.value.delete(id)
-  if (!pendingEntryCovers.value.size) showStagedGrid()
+  if (!pendingEntryCovers.value.size) {
+    clearTimeout(entryCoverTimeout)
+    // Let the hidden grid finish its masonry measurements before it becomes visible.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (staged.value?.key === grid) showStagedGrid()
+    }))
+  }
 }
 async function load(append = false) {
   const request = ++generation
@@ -156,6 +166,11 @@ async function load(append = false) {
     if (request === generation && !staged.value) loading.value = false
   }
 }
+function selectCategory(category: number | null) {
+  if (category === selected.value && !error.value) return
+  selected.value = category
+  void load()
+}
 function open(video: ShortVideo | Video) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
   playerItems.value = visible.value as ShortVideo[]
@@ -191,7 +206,7 @@ onMounted(() => {
       <input v-model="query" aria-label="搜索视频标题或作者" placeholder="搜索视频、作者" type="search" />
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
-    <CategoryStrip :categories="categories" v-model="selected" @update:model-value="load()" />
+    <CategoryStrip :categories="categories" :model-value="kind === 'short' ? displayedCategory : selected" @update:model-value="selectCategory" />
     <div ref="scrollArea" class="discovery-scroll">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
       <div v-else class="relative">
