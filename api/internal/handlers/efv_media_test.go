@@ -32,3 +32,19 @@ func TestEFVMediaOriginReload(t *testing.T) {
 		t.Fatal("unrelated media was rewritten")
 	}
 }
+
+func TestEFVFrontendCoverRoute(t *testing.T) {
+	handler := &ShortVideoHandler{EFVEndpoint: "https://efv.example"}
+	video := models.ShortVideoWithRelations{}
+	video.ID, video.Status, video.URL = 8, "published", "https://efv.example/videos/test/index.m3u8"
+	handler.applyMediaDomain(&video, nil, false)
+	if video.Cover == nil || *video.Cover != "/efv-covers/8" {
+		t.Fatal("expected dynamic EFV cover URL")
+	}
+	custom := "shorts/covers/manual.jpg"
+	video.Cover = &custom
+	handler.applyMediaDomain(&video, nil, false)
+	if *video.Cover != custom {
+		t.Fatal("manually uploaded cover was replaced")
+	}
+}

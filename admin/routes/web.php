@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\EfvGalleryUploadController;
+use App\Http\Controllers\EfvShortVideoCoverController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/admin/efv-gallery/upload', EfvGalleryUploadController::class)
@@ -8,5 +9,7 @@ Route::post('/admin/efv-gallery/upload', EfvGalleryUploadController::class)
 
 Route::post('/admin/efv-gallery/chunk', [EfvGalleryUploadController::class, 'chunk'])
     ->middleware('auth:admin')->name('admin.efv-gallery.chunk');
+
+Route::get('/efv-covers/{video}', EfvShortVideoCoverController::class)->whereNumber('video');
 
 Route::get('/', fn () => redirect('/admin'));

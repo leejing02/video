@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -42,6 +43,11 @@ func (h *ShortVideoHandler) applyMediaDomain(video *models.ShortVideoWithRelatio
 		!(target != nil && strings.EqualFold(media.Host, target.Host)) {
 		return
 	}
+	if video.Status == "published" && video.ID > 0 && (video.Cover == nil || *video.Cover == "" ||
+		strings.HasPrefix(*video.Cover, "shorts/covers/efv-") || isEFVRemoteCover(*video.Cover, origin)) {
+		cover := fmt.Sprintf("/efv-covers/%d", video.ID)
+		video.Cover = &cover
+	}
 	if target != nil {
 		media.Host = target.Host
 	}
@@ -49,4 +55,9 @@ func (h *ShortVideoHandler) applyMediaDomain(video *models.ShortVideoWithRelatio
 	if sign {
 		video.URL = signEFVPlayback(video.URL, "https://"+media.Host, h.EFVPlaybackKey, time.Now())
 	}
+}
+
+func isEFVRemoteCover(raw string, origin *url.URL) bool {
+	cover, err := url.Parse(raw)
+	return origin != nil && err == nil && cover.Scheme == "https" && cover.User == nil && strings.EqualFold(cover.Host, origin.Host)
 }

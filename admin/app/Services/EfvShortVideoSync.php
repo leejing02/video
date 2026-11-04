@@ -56,6 +56,11 @@ class EfvShortVideoSync
 
     public function sync(Video $video, ?string $id, bool $automatic = false): ?string
     {
+        return $this->applyTranscodedMovie($video, $this->fetchMovie($id), $automatic);
+    }
+
+    public function fetchMovie(?string $id): array
+    {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $key = config('services.efv.api_key');
 
@@ -80,7 +85,7 @@ class EfvShortVideoSync
             throw new DomainException('EFV 尚未返回该视频的转码结果，请检查 EFV 视频状态和查询配置。');
         }
 
-        return $this->applyTranscodedMovie($video, $movie, $automatic);
+        return $movie;
     }
 
     public function applyTranscodedMovie(Video $video, array $movie, bool $automatic = false): ?string
@@ -93,25 +98,15 @@ class EfvShortVideoSync
             throw new DomainException('EFV 已返回视频信息，但没有可用的 M3U8 地址。');
         }
 
-        $covers = array_values(array_unique(array_filter([
-            $this->mediaUrl($endpoint, $movie['poster'] ?? null),
-            $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
-        ])));
-        $imageOrigin = app(EfvMediaDomains::class)->read()['image_origin'];
+        $covers = $this->coverCandidates($movie);
         $replaceCover = !$video->cover || in_array($video->cover, $covers, true);
         $cover = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
-            foreach ($covers as $candidate) {
-                try {
-                    $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
-                    $cover = $source ? $this->storeCover($imageOrigin ?? $endpoint, $source) : null;
-                    if ($cover) {
-                        break;
-                    }
-                } catch (DomainException $exception) {
-                    $coverFailure = $exception->getMessage();
-                }
+            try {
+                $cover = $this->downloadCover($covers, app(EfvMediaDomains::class)->read()['image_origin']);
+            } catch (DomainException $exception) {
+                $coverFailure = $exception->getMessage();
             }
         }
         $time = (string) ($movie['time'] ?? '');
@@ -141,6 +136,39 @@ class EfvShortVideoSync
         return $replaceCover && !$cover
             ? $coverFailure
             : null;
+    }
+
+    public function coverCandidates(array $movie): array
+    {
+        $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
+
+        return array_values(array_unique(array_filter([
+            $this->mediaUrl($endpoint, $movie['poster'] ?? null),
+            $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
+        ])));
+    }
+
+    public function downloadCover(array $covers, ?string $imageOrigin): ?string
+    {
+        $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
+        $failure = null;
+        foreach ($covers as $candidate) {
+            try {
+                $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
+                $cover = $source ? $this->storeCover($imageOrigin ?? $endpoint, $source) : null;
+                if ($cover) {
+                    return $cover;
+                }
+            } catch (DomainException $exception) {
+                $failure = $exception;
+            }
+        }
+
+        if ($failure) {
+            throw $failure;
+        }
+
+        return null;
     }
 
     private function coverSource(string $endpoint, string $url, ?string $imageOrigin): ?string
