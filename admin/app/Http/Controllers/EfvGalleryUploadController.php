@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Video;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,10 +41,6 @@ class EfvGalleryUploadController extends Controller
             abort_unless(in_array($extension, ['mp4', 'mkv', 'avi', 'dat', 'mpg', 'rmvb', 'rm', 'flv', 'mpeg', 'mov', 'wmv', 'vob', 'asf', 'ts'], true), 422, '不支持此视频格式');
         }
 
-        $uploader = $image ? null : $request->validate([
-            'user_id' => ['required', 'integer', Rule::exists('users', 'id')->where('is_active', true)],
-        ])['user_id'];
-
         $config = config('services.efv');
         $base = rtrim($config['endpoint'], '/');
         abort_unless(parse_url($base, PHP_URL_SCHEME) === 'https', 503, 'EFV_ENDPOINT 必须使用 HTTPS');
@@ -61,6 +57,7 @@ class EfvGalleryUploadController extends Controller
         $lock = Cache::lock('efv-gallery:'.$batch, 55);
         abort_unless($lock->get(), 409, '这一批文件正在上传，请稍后重试');
 
+        $stage = '创建合集';
         try {
             $batches->insertOrIgnore([
                 'id' => $batch, 'admin_id' => $admin->getKey(),
@@ -80,10 +77,11 @@ class EfvGalleryUploadController extends Controller
                 $group = $response->json('id');
                 abort_unless($response->successful() && $response->json('success')
                     && $response->json('section') === $section && is_string($group)
-                    && preg_match('/^[a-f0-9]{24}$/i', $group), 502, 'EFV 图集创建失败，请检查接口部署和管理凭证');
+                    && preg_match('/^[a-f0-9]{24}$/i', $group), 502, $this->efvFailure('创建合集', $response, $config));
                 $batches->where('id', $batch)->update(['group_id' => $group]);
             }
 
+            $stage = $image ? '提交图片' : '提交视频';
             $item = substr(hash('sha256', $group.':'.$data['order']), 0, 24);
             $stream = fopen($file->getPathname(), 'rb');
             abort_unless($stream, 422, '无法读取上传文件');
@@ -104,16 +102,16 @@ class EfvGalleryUploadController extends Controller
                 }
             }
 
-            abort_unless($response->successful() && $response->json('success'), 502, 'EFV 未接受文件（HTTP '.$response->status().'）');
+            abort_unless($response->successful() && $response->json('success'), 502, $this->efvFailure($stage, $response, $config));
             $files = json_decode($record->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
             $entry = $files[$data['order']] ?? [];
-            DB::transaction(function () use (&$entry, $files, $data, $batches, $batch, $image, $file, $uploader, $category) {
+            DB::transaction(function () use (&$entry, $files, $data, $batches, $batch, $image, $file, $category) {
                 $entry['name'] = $file->getClientOriginalName();
                 $entry['status'] = $image ? '图片已加入图集' : '视频已提交转码，已创建本地草稿';
                 if (!$image && empty($entry['video_id'])) {
                     $title = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
                     $video = Video::create([
-                        'user_id' => $uploader,
+                        'user_id' => User::adminUploadOwner()->id,
                         'category_id' => $category->getKey(),
                         'type' => Video::TYPE_SHORT,
                         'title' => Str::limit($title ?: '未命名短视频', 150, ''),
@@ -131,9 +129,23 @@ class EfvGalleryUploadController extends Controller
 
             return response()->json(['message' => $entry['status'], 'video_id' => $entry['video_id'] ?? null]);
         } catch (ConnectionException) {
-            abort(502, '连接 EFV 超时或失败，可重试当前文件');
+            abort(502, 'EFV '.$stage.'时连接失败或超时，可重试当前文件');
         } finally {
             $lock->release();
         }
+    }
+
+    private function efvFailure(string $stage, \Illuminate\Http\Client\Response $response, array $config): string
+    {
+        $message = $response->json('message') ?? $response->json('error');
+        $detail = '';
+        if (is_string($message)) {
+            $detail = strip_tags($message);
+            $detail = str_replace([$config['upload_key'], $config['api_key'], $config['api_secret']], '[隐藏]', $detail);
+            $detail = trim(preg_replace('/\s+/u', ' ', $detail) ?? '');
+        }
+
+        return 'EFV '.$stage.'失败（HTTP '.$response->status().'）'
+            .($detail !== '' ? '：'.Str::limit($detail, 160) : '');
     }
 }

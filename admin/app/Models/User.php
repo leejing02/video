@@ -46,6 +46,25 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 
+    public static function adminUploadOwner(): self
+    {
+        $owner = self::firstOrCreate(
+            ['username' => 'efv-system-admin'],
+            [
+                'name' => '管理员',
+                'email' => 'efv-system-admin@system.invalid',
+                'password' => \Illuminate\Support\Str::random(64),
+                'role' => self::ROLE_USER,
+                'is_active' => false,
+            ],
+        );
+
+        abort_unless(!$owner->is_active && $owner->email === 'efv-system-admin@system.invalid',
+            409, '管理员上传归属账号冲突，请检查 efv-system-admin');
+
+        return $owner;
+    }
+
     /* -------------------- Filament -------------------- */
 
     /**

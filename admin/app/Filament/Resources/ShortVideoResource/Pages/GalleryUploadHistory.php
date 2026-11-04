@@ -7,7 +7,6 @@ use App\Models\Category;
 use App\Models\User;
 use App\Models\Video;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Http\Client\ConnectionException;
@@ -38,13 +37,9 @@ class GalleryUploadHistory extends Page
     {
         return Action::make('importVideos')
             ->label('补录到短视频')
-            ->form([
-                Select::make('user_id')->label('本地短视频上传者')->required()->searchable()
-                    ->options(fn () => User::where('is_active', true)->orderBy('name')->pluck('name', 'id')),
-            ])
-            ->action(function (array $data, array $arguments) {
+            ->requiresConfirmation()
+            ->action(function (array $arguments) {
                 abort_unless(static::canAccess(), 403);
-                $uploader = User::where('is_active', true)->findOrFail($data['user_id']);
                 $batchId = $arguments['batch'] ?? '';
                 abort_unless(is_string($batchId) && Str::isUuid($batchId), 422);
                 $query = DB::table('efv_gallery_batches')->where('admin_id', auth('admin')->id())->where('id', $batchId);
@@ -68,7 +63,7 @@ class GalleryUploadHistory extends Page
                 }
 
                 try {
-                    $count = DB::transaction(function () use ($query, $media, $uploader, $category) {
+                    $count = DB::transaction(function () use ($query, $media, $category) {
                         $files = json_decode($query->first()->files ?? '[]', true, flags: JSON_THROW_ON_ERROR);
                         $count = 0;
                         foreach ($media as $item) {
@@ -78,7 +73,7 @@ class GalleryUploadHistory extends Page
                             }
                             $name = (string) ($files[$order]['name'] ?? $item['title'] ?? '未命名短视频');
                             $video = Video::create([
-                                'user_id' => $uploader->id,
+                                'user_id' => User::adminUploadOwner()->id,
                                 'category_id' => $category->id,
                                 'type' => Video::TYPE_SHORT,
                                 'title' => Str::limit($name ?: '未命名短视频', 150, ''),
