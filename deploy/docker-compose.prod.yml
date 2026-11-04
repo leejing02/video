@@ -172,6 +172,7 @@ services:
       EFV_ENDPOINT: "${EFV_ENDPOINT:-https://houtai.houtai2026.top}"
       EFV_UPLOAD_KEY: "${EFV_UPLOAD_KEY:-}"
       EFV_API_KEY: "${EFV_API_KEY:-}"
+      EFV_CMS_API_KEY: "${EFV_CMS_API_KEY:-}"
       EFV_API_SECRET: "${EFV_API_SECRET:-}"
       EFV_IMAGE_AES_KEY: "${EFV_IMAGE_AES_KEY:-}"
       EFV_IMAGE_AES_IV: "${EFV_IMAGE_AES_IV:-}"

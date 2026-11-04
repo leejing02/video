@@ -41,12 +41,13 @@ Schedule::command('efv:sync-short-videos')
     ->everyMinute()
     ->withoutOverlapping(5);
 
-Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入}', function () {
+Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入} {--cms : 使用苹果 CMS 采集接口}', function () {
     try {
         $stats = app(\App\Services\EfvShortVideoImport::class)->run(
             app(EfvShortVideoSync::class),
             (bool) $this->option('preview'),
             fn ($page, $pages, $stats) => $this->line("已扫描 {$page}/{$pages} 页，新增候选 {$stats['eligible']}，已发布 {$stats['published']}"),
+            cms: (bool) $this->option('cms'),
         );
     } catch (DomainException $exception) {
         $this->error($exception->getMessage());
