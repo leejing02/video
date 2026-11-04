@@ -35,38 +35,79 @@ const categories = ref<(Category | ShortCategory)[]>([])
 const selected = ref<number | null>(null)
 const displayedCategory = ref<number | null>(null)
 const slideDirection = ref(0)
+const dragDirection = ref(0)
+const dragOffset = ref(0)
+const releaseOffset = ref(0)
+const previewReady = computed(() => !!staged.value?.items.length && !pendingEntryCovers.value.size)
+const previewing = computed(() => dragDirection.value !== 0 && previewReady.value)
 const categoryOrder = computed(() => [null, ...categories.value.map(category => category.id)])
 let categoryTouch: { x: number; y: number; id: number } | undefined
 
 function startCategorySwipe(event: TouchEvent) {
   categoryTouch = undefined
-  if (props.kind !== 'short' || playerIndex.value !== null || event.touches.length !== 1) return
+  if (loading.value || props.kind !== 'short' || playerIndex.value !== null || event.touches.length !== 1) return
   const touch = event.touches[0]
   if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return
   categoryTouch = { x: touch.clientX, y: touch.clientY, id: touch.identifier }
 }
 
+function cancelCategorySwipe() {
+  categoryTouch = undefined
+  if (!dragDirection.value) return
+  dragOffset.value = 0
+  const request = ++generation
+  selected.value = displayedCategory.value
+  clearTimeout(entryCoverTimeout)
+  setTimeout(() => {
+    if (request !== generation) return
+    dragDirection.value = 0
+    staged.value = undefined
+    pendingEntryCovers.value.clear()
+    loading.value = false
+    error.value = ''
+  }, 180)
+}
+
 function trackCategorySwipe(event: TouchEvent) {
-  if (!categoryTouch) return
+  const start = categoryTouch
+  if (!start) return
   const touch = event.touches[0]
-  if (event.touches.length !== 1 || touch.identifier !== categoryTouch.id ||
-      (Math.abs(touch.clientY - categoryTouch.y) > 12 &&
-       Math.abs(touch.clientY - categoryTouch.y) >= Math.abs(touch.clientX - categoryTouch.x))) {
-    categoryTouch = undefined
+  if (event.touches.length !== 1 || touch.identifier !== start.id) {
+    cancelCategorySwipe()
+    return
   }
+  const dx = touch.clientX - start.x
+  const dy = Math.abs(touch.clientY - start.y)
+  if (!dragDirection.value) {
+    if (dy > 12 && dy >= Math.abs(dx)) {
+      cancelCategorySwipe()
+      return
+    }
+    if (Math.abs(dx) < 10 || Math.abs(dx) < dy * 1.5) return
+    const direction = dx < 0 ? 1 : -1
+    const category = categoryOrder.value[categoryOrder.value.indexOf(displayedCategory.value) + direction]
+    if (category === undefined) return
+    dragDirection.value = direction
+    selected.value = category
+    void load()
+  }
+  const width = scrollArea.value?.clientWidth ?? window.innerWidth
+  dragOffset.value = dragDirection.value * Math.min(width, Math.max(0, -dx * dragDirection.value))
 }
 
 function endCategorySwipe(event: TouchEvent) {
   const start = categoryTouch
   categoryTouch = undefined
-  if (!start) return
+  if (!start || !dragDirection.value) return
   const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id)
-  if (!touch) return
-  const dx = touch.clientX - start.x
-  if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(touch.clientY - start.y) * 1.5) return
-  const index = categoryOrder.value.indexOf(displayedCategory.value) + (dx < 0 ? 1 : -1)
-  const category = categoryOrder.value[index]
-  if (category !== undefined) selectCategory(category)
+  if (!touch || (start.x - touch.clientX) * dragDirection.value < 55) {
+    cancelCategorySwipe()
+    return
+  }
+  releaseOffset.value = previewing.value ? dragOffset.value : 0
+  dragDirection.value = 0
+  dragOffset.value = 0
+  if (staged.value && !pendingEntryCovers.value.size) showStagedGrid()
 }
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
@@ -118,7 +159,7 @@ const grids = computed(() => {
 })
 function showStagedGrid() {
   const incoming = staged.value
-  if (!incoming || incoming.key !== generation) return
+  if (!incoming || incoming.key !== generation || dragDirection.value) return
   clearTimeout(entryCoverTimeout)
   videos.value = incoming.items
   eagerCoverIds.value = incoming.coverIds
@@ -187,6 +228,9 @@ async function load(append = false) {
             staged.value = undefined
             pendingEntryCovers.value.clear()
             loading.value = false
+            dragDirection.value = 0
+            dragOffset.value = 0
+            releaseOffset.value = 0
             error.value = '分类封面加载超时，请重试'
           }, 5000)
         } else showStagedGrid()
@@ -198,13 +242,20 @@ async function load(append = false) {
     page.value = nextPage
     more.value = hasMore
   } catch {
-    if (request === generation) error.value = '视频加载失败，请重试'
+    if (request === generation) {
+      dragDirection.value = 0
+      dragOffset.value = 0
+      releaseOffset.value = 0
+      error.value = '视频加载失败，请重试'
+    }
   } finally {
     if (request === generation && !staged.value) loading.value = false
   }
 }
 function selectCategory(category: number | null) {
+  if (dragDirection.value) return
   if (category === selected.value && !error.value) return
+  releaseOffset.value = 0
   selected.value = category
   void load()
 }
@@ -246,11 +297,11 @@ onMounted(() => {
     <CategoryStrip :categories="categories" :model-value="kind === 'short' ? displayedCategory : selected" @update:model-value="selectCategory" />
     <div ref="scrollArea" class="discovery-scroll" :class="{ 'touch-pan-y overflow-x-hidden': kind === 'short' }"
       @touchstart.passive="startCategorySwipe" @touchmove.passive="trackCategorySwipe"
-      @touchend.passive="endCategorySwipe" @touchcancel.passive="categoryTouch = undefined">
+      @touchend.passive="endCategorySwipe" @touchcancel.passive="cancelCategorySwipe">
       <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <TransitionGroup v-else tag="div" name="category-slide" class="relative"
-        :style="{ '--category-slide-direction': slideDirection }">
-        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0 }]">
+      <TransitionGroup v-else tag="div" name="category-slide" class="relative" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
+        :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
+        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
           <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video)" />
         </div>
       </TransitionGroup>
@@ -270,6 +321,17 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.category-preview .video-grid:not(.category-preview-incoming) {
+  animation: none;
+  transform: translateX(calc(-1 * var(--category-drag)));
+}
+.category-preview .category-preview-incoming {
+  height: auto;
+  visibility: visible;
+  transform: translateX(calc(var(--category-preview-direction) * 100% - var(--category-drag)));
+}
+.category-returning .video-grid { transition: transform 180ms ease-out; }
+
 .category-slide-current {
   animation: category-slide-in 220ms ease-out both;
 }
@@ -283,12 +345,12 @@ onMounted(() => {
 }
 
 @keyframes category-slide-in {
-  from { transform: translateX(calc(var(--category-slide-direction) * 100%)); }
+  from { transform: translateX(calc(var(--category-slide-direction) * 100% - var(--category-release))); }
   to { transform: translateX(0); }
 }
 
 @keyframes category-slide-out {
-  from { transform: translateX(0); }
+  from { transform: translateX(calc(-1 * var(--category-release))); }
   to { transform: translateX(calc(var(--category-slide-direction) * -100%)); }
 }
 </style>
