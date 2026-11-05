@@ -641,7 +641,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="showComments && currentVideo" class="player-sheet-mask" @click.self="showComments=false" @touchmove.stop>
-      <PlayerComments :key="currentVideo.id" :video-id="currentVideo.id" :count="currentVideo.comments_count" @close="showComments=false" @posted="refreshInteractions"/>
+      <PlayerComments :key="currentVideo.id" :video-id="currentVideo.id" :count="currentVideo.comments_count" :video="currentVideo" @close="showComments=false" @posted="refreshInteractions"/>
     </div>
     <div v-if="panel && currentVideo" class="player-sheet-mask" @click.self="panel=null" @touchmove.stop>
       <section class="player-sheet" role="dialog" aria-modal="true" :aria-label="panel==='share'?'分享视频':'作者主页'" @click.stop>
