@@ -91,6 +91,30 @@ class EfvShortVideoImport
                     throw new DomainException("EFV 第 {$page} 页返回异常，请检查 API 设置。");
                 }
 
+                // Fetch a bounded category snapshot when the provider supports num.
+                // Offset pages can overlap when the provider sorts equal timestamps unstably.
+                $totalForSnapshot = filter_var($response->json('total'), FILTER_VALIDATE_INT);
+                if ($cms && $reconcile && $page === 1 && $pageCount > 1
+                    && $totalForSnapshot !== false && $totalForSnapshot <= 10000 && $totalForSnapshot > 0) {
+                    try {
+                        $snapshot = $http->get($endpoint.'/api/provider/vod/', $cmsAuth + [
+                            'ac' => 'detail', 't' => $categoryId, 'pg' => 1,
+                            'num' => $totalForSnapshot, 'm3u8url' => $endpoint,
+                        ]);
+                        $snapshotMovies = $snapshot->json('list');
+                        if ($snapshot->successful() && (int) $snapshot->json('code') === 1
+                            && (int) $snapshot->json('page') === 1 && (int) $snapshot->json('pagecount') === 1
+                            && (int) $snapshot->json('total') === $totalForSnapshot
+                            && is_array($snapshotMovies) && count($snapshotMovies) === $totalForSnapshot) {
+                            $response = $snapshot;
+                            $movies = $snapshotMovies;
+                            $pageCount = 1;
+                        }
+                    } catch (ConnectionException) {
+                        // Keep scanning validated pages if the provider limits snapshot size.
+                    }
+                }
+
                 $stats['source_total'] = $response->json('total');
                 $stats['scanned'] += count($movies);
                 if ($reconcile) {

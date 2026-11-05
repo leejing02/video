@@ -49,8 +49,19 @@ $sync = new class extends EfvShortVideoSync {
 };
 $total = 1;
 $pages = 1;
-Http::fake(function ($request) use ($id, &$total, &$pages) {
+$snapshotSupported = false;
+Http::fake(function ($request) use ($id, $removed, &$total, &$pages, &$snapshotSupported) {
     if ($request['ac'] === 'list') return Http::response(['code' => 1, 'class' => [['type_name' => '国产短视频', 'type_id' => 9]]]);
+    if ($snapshotSupported && (int) $request['num'] === 2) {
+        $records = [];
+        foreach ([$id, $removed] as $sourceId) {
+            $records[] = [
+                'type_name' => '国产短视频', 'vod_id' => $sourceId, 'vod_name' => 'snapshot title',
+                'vod_play_url' => 'HD$https://efv.example.test/videos/new/index.m3u8',
+            ];
+        }
+        return Http::response(['code' => 1, 'page' => 1, 'pagecount' => 1, 'total' => 2, 'list' => $records]);
+    }
     return Http::response(['code' => 1, 'page' => (int) $request['pg'], 'pagecount' => $pages, 'total' => $total, 'list' => [[
         'type_name' => '国产短视频', 'vod_id' => $id, 'vod_name' => 'new title', 'vod_content' => '<p>new summary</p>',
         'vod_play_url' => 'HD$https://efv.example.test/videos/new/index.m3u8',
@@ -68,6 +79,10 @@ $pages = 2;
 $stats = $run();
 $assert($stats['unique'] === 1 && count($stats['duplicates']) === 1 && $stats['archive_skipped'], 'Duplicate pages did not complete safely.');
 $assert(Video::find(2)->status === 'published', 'Duplicate pages archived records.');
+$snapshotSupported = true;
+$stats = $run();
+$assert($stats['unique'] === 2 && !$stats['archive_skipped'] && !$stats['duplicates'], 'Snapshot did not recover overlapping pages.');
+$snapshotSupported = false;
 $pages = 1;
 $total = 1;
 $stats = $run();
