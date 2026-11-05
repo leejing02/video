@@ -7,6 +7,7 @@ const html = readFileSync(new URL('../player.html', import.meta.url), 'utf8')
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
 function boot(overrides = {}, unavailable = false) {
   const layers = []
+  layers.timeouts = 0
   const saved = { id: 10, entry: 'current', created: Date.now(), cover: 'data:image/webp;base64,AQID', ...overrides }
   vm.runInNewContext(script, {
     URLSearchParams, Date,
@@ -17,7 +18,7 @@ function boot(overrides = {}, unavailable = false) {
       body: { append(layer) { layers.push(layer) } },
     },
     Image: class {},
-    setTimeout() {},
+    setTimeout() { layers.timeouts++ },
   })
   return layers
 }
@@ -29,6 +30,7 @@ test('clicked cover is painted by plain HTML before Vue startup', () => {
   assert.equal(layers[0].id, 'playback-entry-cover')
   assert.equal(layers[0].image.src, 'data:image/webp;base64,AQID')
   assert.equal(layers[0].image.decoding, 'sync')
+  assert.equal(layers.timeouts, 0, 'keep the cover until the player acknowledges readiness')
 })
 
 test('stale or different playback entries never show an unrelated cover', () => {
