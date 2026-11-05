@@ -317,9 +317,11 @@ onMounted(() => {
       <button v-else-if="(kind === 'long' || !autoLoad) && more && !error && !query" class="feed-more" :disabled="loading" @click="load(true)">{{ loading ? '加载中…' : '加载更多' }}</button>
     </div>
     </div>
-    <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="playerIndex = null">
-      <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="playerIndex = null" />
-    </div>
+    <Teleport to="body">
+      <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="playerIndex = null">
+        <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="playerIndex = null" />
+      </div>
+    </Teleport>
   </section>
 </template>
 
