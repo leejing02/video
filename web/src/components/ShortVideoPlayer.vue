@@ -484,6 +484,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+:global(html:has(.short-player)),
+:global(body:has(.short-player)) { background: #000; }
 .player-top-bar {
   height: calc(env(safe-area-inset-top, 0px) + 56px);
   flex-shrink: 0;
