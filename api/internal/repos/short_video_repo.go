@@ -3,13 +3,18 @@ package repos
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/yourname/video-api/internal/models"
+	"github.com/yourname/video-api/internal/videocache"
 )
 
-type ShortVideoRepo struct{ DB *sqlx.DB }
+type ShortVideoRepo struct {
+	DB    *sqlx.DB
+	Cache *videocache.Cache
+}
 
 func NewShortVideoRepo(db *sqlx.DB) *ShortVideoRepo { return &ShortVideoRepo{DB: db} }
 
@@ -23,6 +28,16 @@ type ListShortVideoFilter struct {
 }
 
 func (r *ShortVideoRepo) List(f ListShortVideoFilter) ([]models.ShortVideoWithRelations, int64, error) {
+	if f.IncludeAll || f.UserID > 0 {
+		return r.listDB(f)
+	}
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
+	}
+	return loadVideoPage(r.Cache, cacheKey("short:list", f), func() ([]models.ShortVideoWithRelations, int64, error) { return r.listDB(f) })
+}
+
+func (r *ShortVideoRepo) listDB(f ListShortVideoFilter) ([]models.ShortVideoWithRelations, int64, error) {
 	// 	conds := []string{}
 	conds := []string{"v.type = 'short'"}
 
@@ -102,6 +117,10 @@ func (r *ShortVideoRepo) List(f ListShortVideoFilter) ([]models.ShortVideoWithRe
 }
 
 func (r *ShortVideoRepo) FindByID(id int64) (*models.ShortVideoWithRelations, error) {
+	return videocache.Load(r.Cache, fmt.Sprintf("short:detail:%d", id), func() (*models.ShortVideoWithRelations, error) { return r.findByIDDB(id) })
+}
+
+func (r *ShortVideoRepo) findByIDDB(id int64) (*models.ShortVideoWithRelations, error) {
 	row := struct {
 		models.ShortVideo
 		UID  int64   `db:"u_id"`
@@ -305,6 +324,10 @@ func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]model
 // === Categories ===
 
 func (r *ShortVideoRepo) ListCategories() ([]models.ShortCategory, error) {
+	return videocache.Load(r.Cache, "short:categories", r.listCategoriesDB)
+}
+
+func (r *ShortVideoRepo) listCategoriesDB() ([]models.ShortCategory, error) {
 	var cats []models.ShortCategory
 	err := r.DB.Select(&cats, `
 		SELECT id, name, slug, parent_id, icon, cover, description, sort, is_active

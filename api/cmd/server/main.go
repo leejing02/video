@@ -4,16 +4,19 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-
 	"github.com/yourname/video-api/internal/config"
 	"github.com/yourname/video-api/internal/db"
 	"github.com/yourname/video-api/internal/handlers"
 	"github.com/yourname/video-api/internal/middleware"
 	"github.com/yourname/video-api/internal/repos"
+	"github.com/yourname/video-api/internal/videocache"
 	"github.com/yourname/video-api/internal/ws"
 )
 
@@ -33,6 +36,33 @@ func main() {
 	chatRepo := repos.NewChatRepo(dbx)
 	liveRepo := repos.NewLiveRepo(dbx)
 	baziRepo := repos.NewBaziRepo(dbx)
+
+	// Public metadata: local memory/disk -> Redis -> MySQL. Private queries bypass it.
+	var remote videocache.Remote
+	if addr := os.Getenv("VIDEO_CACHE_REDIS_ADDR"); addr != "" {
+		redisDB, _ := strconv.Atoi(os.Getenv("VIDEO_CACHE_REDIS_DB"))
+		client := videocache.NewRedis(addr, os.Getenv("VIDEO_CACHE_REDIS_PASSWORD"), redisDB)
+		defer client.Close()
+		remote = client
+	}
+	if os.Getenv("VIDEO_CACHE_ENABLED") != "false" {
+		cacheDir := os.Getenv("VIDEO_CACHE_DIR")
+		if cacheDir == "" {
+			cacheDir = "/tmp/video-metadata-cache"
+		}
+		cache := videocache.New(cacheDir, cfg.DBHost+":"+cfg.DBName, remote)
+		vidRepo.Cache, shortVidRepo.Cache, catRepo.Cache = cache, cache, cache
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go cache.Run(ctx)
+		go func() {
+			// Warm the discovery entry points before the first visitor arrives.
+			_, _ = shortVidRepo.ListCategories()
+			_, _ = catRepo.List("long")
+			_, _, _ = shortVidRepo.List(repos.ListShortVideoFilter{Limit: 30})
+			_, _, _ = vidRepo.List(repos.ListVideoFilter{Type: "long", Limit: 20})
+		}()
+	}
 
 	// WebSocket Hub
 	hub := ws.NewHub()

@@ -136,12 +136,19 @@ services:
       CORS_ORIGINS: "https://${ADMIN_DOMAIN},https://${API_DOMAIN}"
       EFV_ENDPOINT: "${EFV_ENDPOINT:-https://houtai.houtai2026.top}"
       EFV_PLAYBACK_KEY: "${EFV_PLAYBACK_KEY:-}"
+      VIDEO_CACHE_ENABLED: "${VIDEO_CACHE_ENABLED:-true}"
+      VIDEO_CACHE_DIR: /var/cache/video-metadata
+      VIDEO_CACHE_REDIS_ADDR: redis:6379
+      VIDEO_CACHE_REDIS_DB: "2"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./deploy/efv-media:/etc/video/efv-media:ro
+      - video_metadata_cache:/var/cache/video-metadata
     expose:
       - "8000"
     healthcheck:
@@ -271,6 +278,7 @@ volumes:
   redis_data:
   traefik_acme:
   admin_storage:
+  video_metadata_cache:
   backup_data:
 
 networks:

@@ -3,13 +3,18 @@ package repos
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/yourname/video-api/internal/models"
+	"github.com/yourname/video-api/internal/videocache"
 )
 
-type VideoRepo struct{ DB *sqlx.DB }
+type VideoRepo struct {
+	DB    *sqlx.DB
+	Cache *videocache.Cache
+}
 
 func NewVideoRepo(db *sqlx.DB) *VideoRepo { return &VideoRepo{DB: db} }
 
@@ -24,6 +29,16 @@ type ListVideoFilter struct {
 
 // List 公共列表（仅 published）
 func (r *VideoRepo) List(f ListVideoFilter) ([]models.VideoWithRelations, int64, error) {
+	if f.UserID > 0 {
+		return r.listDB(f)
+	}
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
+	}
+	return loadVideoPage(r.Cache, cacheKey("video:list", f), func() ([]models.VideoWithRelations, int64, error) { return r.listDB(f) })
+}
+
+func (r *VideoRepo) listDB(f ListVideoFilter) ([]models.VideoWithRelations, int64, error) {
 	conds := []string{"v.status = 'published'"}
 	args := []any{}
 	if f.Type == "long" || f.Type == "short" {
@@ -104,6 +119,10 @@ func (r *VideoRepo) List(f ListVideoFilter) ([]models.VideoWithRelations, int64,
 }
 
 func (r *VideoRepo) FindByID(id int64) (*models.VideoWithRelations, error) {
+	return videocache.Load(r.Cache, fmt.Sprintf("video:detail:%d", id), func() (*models.VideoWithRelations, error) { return r.findByIDDB(id) })
+}
+
+func (r *VideoRepo) findByIDDB(id int64) (*models.VideoWithRelations, error) {
 	row := struct {
 		models.Video
 		UID  int64   `db:"u_id"`

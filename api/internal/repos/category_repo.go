@@ -3,9 +3,13 @@ package repos
 import (
 	"github.com/jmoiron/sqlx"
 	"github.com/yourname/video-api/internal/models"
+	"github.com/yourname/video-api/internal/videocache"
 )
 
-type CategoryRepo struct{ DB *sqlx.DB }
+type CategoryRepo struct {
+	DB    *sqlx.DB
+	Cache *videocache.Cache
+}
 
 func NewCategoryRepo(db *sqlx.DB) *CategoryRepo { return &CategoryRepo{DB: db} }
 
@@ -43,6 +47,10 @@ func mapKindToType(kind string) string {
 
 // List 列出分类，可按前端 kind 过滤（long/short/...）
 func (r *CategoryRepo) List(kind string) ([]models.Category, error) {
+	return videocache.Load(r.Cache, "categories:"+mapKindToType(kind), func() ([]models.Category, error) { return r.listDB(kind) })
+}
+
+func (r *CategoryRepo) listDB(kind string) ([]models.Category, error) {
 	out := []models.Category{}
 	typeFilter := mapKindToType(kind)
 
