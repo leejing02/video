@@ -2,13 +2,16 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { ObjectDirective } from 'vue'
 import type Hls from 'hls.js'
+import PlayerIcon from './PlayerIcon.vue'
+import AvatarContent from './AvatarContent.vue'
+import PlayerComments from './PlayerComments.vue'
 import { mediaUrl } from '@/utils/media-url'
 import { vEfvCoverBlob, prefetchCover } from '@/utils/efv-cover-blob'
 import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
 import { showToast } from '@/utils/toast'
 import { playbackCoverWindow } from '@/utils/playback-window'
-import type { ShortVideo, ShortVideoComment } from '@/types/models'
+import type { ShortVideo } from '@/types/models'
 
 const auth = useAuthStore()
 const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
@@ -18,9 +21,8 @@ const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
-const commentText = ref('')
-const comments = ref<ShortVideoComment[]>([])
-const isSending = ref(false)
+const panel = ref<'share'|'author'|null>(null)
+const preview = ref('')
 const loadState = ref<'loading' | 'ready' | 'failed'>('loading')
 const loadError = ref('')
 const playback = ref({ paused: true, current: 0, duration: 0, waiting: false })
@@ -49,7 +51,7 @@ function closePlayer() {
   emit('close')
 }
 function startBack(event: TouchEvent) {
-  if (backClosing || backSettling || showComments.value || event.touches.length !== 1) return
+  if (backClosing || backSettling || showComments.value || panel.value || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('button,input,textarea,a')) return
   const touch = event.touches[0]
   if (touch.clientX > 32) return
@@ -405,28 +407,15 @@ async function favorite(id: number) {
   showToast(res.favorited ? '已收藏' : '已取消收藏')
 }
 
-async function share(id: number) {
-  const res = await shortVideoApi.share(id, window.location.origin)
-  await navigator.clipboard.writeText(res.share_url)
-  showToast('链接已复制到剪贴板')
-  const v = videos.value.find(v => v.id === id)
-  if (v) v.shares += 1
+function share(_id: number) { panel.value='share'; preview.value='' }
+function openComments(_id: number) { showComments.value=true }
+async function copyLink() {
+ if (!currentVideo.value) return
+ try {await navigator.clipboard.writeText(location.origin+'/player.html?id='+currentVideo.value.id);showToast('链接已复制')} catch {showToast('复制失败，请使用系统分享')}
 }
-
-async function openComments(id: number) {
-  const res = await shortVideoApi.comments(id, { per_page: 20 })
-  comments.value = res.data ?? (res as any)
-  showComments.value = true
-}
-
-async function sendComment() {
-  if (!commentText.value.trim()) return
-  const v = videos.value[currentIdx.value]
-  if (!v) return
-  await shortVideoApi.createComment(v.id, { content: commentText.value })
-  commentText.value = ''
-  const res = await shortVideoApi.comments(v.id, { per_page: 20 })
-  comments.value = res.data ?? (res as any)
+async function systemShare() {
+ if (!currentVideo.value) return
+ try {if(navigator.share) await navigator.share({title:currentVideo.value.title,url:location.origin+'/player.html?id='+currentVideo.value.id});else await copyLink()}catch(error){if(!(error instanceof DOMException && error.name==='AbortError'))showToast('分享失败，请重试')}
 }
 
 const currentVideo = computed(() => videos.value[currentIdx.value] ?? null)
@@ -578,35 +567,17 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <!-- Action buttons -->
-        <div v-if="isNear(idx)" class="absolute right-3 bottom-32 flex flex-col gap-5 text-white pointer-events-auto">
-          <div class="flex flex-col items-center text-xs">
-            <button
-              :class="['w-10 h-10 rounded-full flex items-center justify-center text-lg', currentVideo?.id === v.id && currentState.liked ? 'bg-red-500' : 'bg-white/15']"
-              @click.stop="like(v.id)"
-            >❤</button>
-            <span class="mt-1">{{ v.likes }}</span>
-          </div>
-          <div class="flex flex-col items-center text-xs">
-            <button
-              :class="['w-10 h-10 rounded-full flex items-center justify-center text-lg', currentVideo?.id === v.id && currentState.favorited ? 'bg-yellow-500' : 'bg-white/15']"
-              @click.stop="favorite(v.id)"
-            >★</button>
-            <span class="mt-1">{{ v.favorites }}</span>
-          </div>
-          <div class="flex flex-col items-center text-xs">
-            <button class="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-lg" @click.stop="openComments(v.id)">💬</button>
-            <span class="mt-1">{{ v.comments_count }}</span>
-          </div>
-          <div class="flex flex-col items-center text-xs">
-            <button class="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-lg" @click.stop="share(v.id)">↗</button>
-            <span class="mt-1">分享</span>
-          </div>
+        <div v-if="isNear(idx)" class="player-actions" @click.stop>
+          <button class="author-avatar" aria-label="查看作者主页" @click="panel='author'"><AvatarContent :src="v.user?.avatar" :name="v.user?.name || v.user?.username"/><b>＋</b></button>
+          <button aria-label="点赞视频" :class="{liked:currentState.liked}" @click="like(v.id)"><PlayerIcon name="heart"/><span>{{v.likes}}</span></button>
+          <button aria-label="查看评论" @click="openComments(v.id)"><PlayerIcon name="comment"/><span>{{v.comments_count}}</span></button>
+          <button aria-label="收藏视频" :class="{saved:currentState.favorited}" @click="favorite(v.id)"><PlayerIcon name="star"/><span>{{v.favorites}}</span></button>
+          <button aria-label="分享视频" @click="share(v.id)"><PlayerIcon name="share"/><span>{{v.shares || '分享'}}</span></button>
         </div>
 
         <!-- Video info -->
         <div v-if="isNear(idx)" class="absolute left-4 bottom-24 right-20 text-white pointer-events-none">
-          <p class="font-semibold">@{{ v.user?.username }}</p>
+          <button class="pointer-events-auto font-semibold" @click.stop="panel='author'">@{{ v.user?.name || v.user?.username }}</button>
           <p class="text-sm mt-1">{{ v.title }}</p>
           <p v-if="v.description" class="text-xs text-gray-300 mt-1 line-clamp-2">{{ v.description }}</p>
         </div>
@@ -615,44 +586,26 @@ onUnmounted(() => {
       <div v-if="!videos.length" class="h-full flex items-center justify-center text-gray-500">暂无短视频</div>
     </div>
 
-    <!-- Comments drawer -->
-    <div v-if="showComments" class="absolute inset-0 z-20 bg-black/50" @click="showComments = false">
-      <div class="absolute bottom-0 left-0 right-0 bg-white text-gray-900 rounded-t-xl max-h-[60vh] flex flex-col" @click.stop>
-        <div class="flex justify-between items-center px-4 py-3 border-b">
-          <span class="font-semibold">评论 ({{ comments.length }})</span>
-          <button class="text-gray-500 text-xl" @click="showComments = false">×</button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-3">
-          <div v-for="c in comments" :key="c.id" class="flex gap-2">
-            <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm">
-              {{ c.user?.username?.[0]?.toUpperCase() ?? '?' }}
-            </div>
-            <div class="flex-1">
-              <p class="text-xs text-gray-500">{{ c.user?.username }}</p>
-              <p class="text-sm mt-0.5">{{ c.content }}</p>
-            </div>
-          </div>
-          <p v-if="!comments.length" class="text-center text-gray-400 py-4">暂无评论</p>
-        </div>
-        <div class="flex gap-2 px-4 py-3 border-t">
-          <input
-            v-model="commentText"
-            placeholder="写下你的评论…"
-            class="flex-1 px-3 py-2 rounded-lg bg-gray-100 text-sm focus:outline-none"
-            @keyup.enter="sendComment"
-          />
-          <button
-            :disabled="!commentText.trim()"
-            class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50"
-            @click="sendComment"
-          >发送</button>
-        </div>
-      </div>
+    <div v-if="showComments && currentVideo" class="player-sheet-mask" @click.self="showComments=false" @touchmove.stop>
+      <PlayerComments :key="currentVideo.id" :video-id="currentVideo.id" :count="currentVideo.comments_count" @close="showComments=false" @posted="currentVideo.comments_count++"/>
+    </div>
+    <div v-if="panel && currentVideo" class="player-sheet-mask" @click.self="panel=null" @touchmove.stop>
+      <section class="player-sheet" role="dialog" aria-modal="true" :aria-label="panel==='share'?'分享视频':'作者主页'" @click.stop>
+       <header><strong>{{panel==='share'?'分享至':'作者主页'}}</strong><button aria-label="关闭面板" @click="panel=null">×</button></header>
+       <template v-if="panel==='share'">
+        <div class="share-options"><button @click="systemShare"><i class="pink"><PlayerIcon name="share"/></i>系统分享</button><button @click="copyLink"><i><PlayerIcon name="link"/></i>复制链接</button><button @click="preview='私信朋友'"><i class="blue"><PlayerIcon name="comment"/></i>私信朋友</button><button v-for="name in ['微信朋友','朋友圈','QQ朋友']" :key="name" @click="preview=name"><i class="green">{{name[0]}}</i>{{name}}</button></div>
+        <div class="share-options secondary"><button v-for="name in ['生成海报','播放反馈','不感兴趣','作品举报']" :key="name" @click="preview=name"><i>{{name==='作品举报'?'!':name==='播放反馈'?'?':'◇'}}</i>{{name}}</button></div>
+        <div v-if="preview" class="feature-preview"><strong>{{preview}}</strong><p>此功能暂未开放</p><button @click="preview=''">返回分享选项</button></div>
+       </template>
+       <template v-else><div class="author-profile"><div class="profile-avatar"><AvatarContent :src="currentVideo.user?.avatar" :name="currentVideo.user?.name || currentVideo.user?.username"/></div><h2>{{currentVideo.user?.name || currentVideo.user?.username}}</h2><p>@{{currentVideo.user?.username}}</p><button class="follow-preview" @click="preview='关注作者'">＋ 关注</button><span v-if="preview==='关注作者'">关注功能暂未开放</span></div><h3 class="author-work-title">作品</h3><div class="author-works"><button v-for="item in videos.filter(item=>item.user?.id===currentVideo?.user?.id)" :key="item.id" @click="currentIdx=videos.indexOf(item);containerRef?.scrollTo({top:currentIdx*containerRef.clientHeight});panel=null"><img v-efv-cover-blob="mediaUrl(item.cover)" :alt="item.title"/><span>{{item.title}}</span></button></div></template>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
+.player-actions{position:absolute;right:12px;bottom:130px;display:flex;flex-direction:column;align-items:center;gap:20px;color:white;pointer-events:auto;filter:drop-shadow(0 1px 2px #0005)}.player-actions>button{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px}.player-actions svg{width:34px;height:34px;fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}.player-actions .liked{color:#ff315b}.player-actions .saved{color:#ffcf44}.player-actions .author-avatar{position:relative;display:grid;width:44px;height:44px;border-radius:50%;border:2px solid white;background:#888;margin-bottom:8px}.author-avatar :deep(img){width:100%;height:100%;object-fit:cover;border-radius:50%}.author-avatar b{position:absolute;bottom:-10px;left:8px;border-radius:12px;background:#ff315b;font-size:18px;width:25px;line-height:19px}.player-sheet-mask{position:absolute;inset:0;z-index:25;background:#0004;display:flex;flex-direction:column;justify-content:flex-end;color-scheme:light}.player-sheet{max-height:75%;overflow:auto;background:#fff;color:#161616;border-radius:22px 22px 0 0;padding-bottom:max(24px,env(safe-area-inset-bottom))}.player-sheet header{position:relative;text-align:center;padding:20px;font-size:17px}.player-sheet header>button{position:absolute;right:18px;top:10px;font-size:30px}.share-options{display:flex;gap:20px;padding:16px 22px 24px;overflow-x:auto}.share-options button{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px}.share-options i{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#f4f4f4;font-size:24px;font-style:normal}.share-options svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2}.share-options .pink{background:#ff315b;color:white}.share-options .blue{background:#25b8f2;color:white}.share-options .green{background:#05c76b;color:white}.secondary{border-top:1px solid #eee}.feature-preview{text-align:center;padding:20px}.feature-preview p{color:#999;margin:12px}.feature-preview button{color:#ff315b}.author-profile{text-align:center;padding:12px}.profile-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:#eee;display:grid;place-items:center;margin:auto;font-size:30px}.profile-avatar :deep(img){width:100%;height:100%;object-fit:cover}.author-profile h2{font-size:22px;font-weight:700;margin:12px}.author-profile p,.author-profile span{display:block;color:#888;font-size:13px}.follow-preview{margin:18px;background:#ff315b;color:#fff;padding:8px 44px;border-radius:20px}.author-work-title{padding:16px;border-top:1px solid #eee;font-weight:700}.author-works{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px}.author-works img{width:100%;aspect-ratio:3/4;object-fit:cover}.author-works span{display:block;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
 :global(html:has(.short-player)),
 :global(body:has(.short-player)) { background: #000; }
 /* Safari 26 can preserve the previous chrome color for full-viewport fixed layers. */

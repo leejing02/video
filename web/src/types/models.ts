@@ -65,6 +65,7 @@ export interface ShortVideo {
 }
 
 export interface ShortVideoComment {
+  likes?: number
   id: number
   user_id: number
   content: string

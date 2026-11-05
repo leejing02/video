@@ -36,7 +36,7 @@ export const shortVideoApi = {
 
   comments: (
     id: number,
-    params: { page?: number; per_page?: number } = {},
+    params: { page?: number; per_page?: number; parent_id?: number } = {},
   ) =>
     get<Paginated<ShortVideoComment>>(
       `/short-videos/${id}/comments`,

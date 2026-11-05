@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourname/video-api/internal/middleware"
@@ -119,7 +120,16 @@ func (h *ShortVideoHandler) ListComments(c *gin.Context) {
 	vid, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	limit := atoi(c.DefaultQuery("per_page", "20"))
 	offset := (atoi(c.DefaultQuery("page", "1")) - 1) * limit
-	comments, err := h.Repo.ListComments(vid, limit, offset)
+	var parents []int64
+	if raw := c.Query("parent_id"); raw != "" {
+		parent, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parent <= 0 {
+			c.JSON(400, gin.H{"error": "invalid parent_id"})
+			return
+		}
+		parents = append(parents, parent)
+	}
+	comments, err := h.Repo.ListComments(vid, limit, offset, parents...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -141,6 +151,23 @@ func (h *ShortVideoHandler) CreateComment(c *gin.Context) {
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
+	}
+	body.Content = strings.TrimSpace(body.Content)
+	if len([]rune(body.Content)) == 0 || len([]rune(body.Content)) > 2000 {
+		c.JSON(400, gin.H{"error": "invalid content"})
+		return
+	}
+	if body.ParentID != nil {
+		var found int
+		err := h.Repo.DB.Get(&found, "SELECT COUNT(*) FROM short_video_comments WHERE id = ? AND video_id = ?", *body.ParentID, vid)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "comment lookup failed"})
+			return
+		}
+		if found != 1 {
+			c.JSON(400, gin.H{"error": "invalid parent comment"})
+			return
+		}
 	}
 	comment := &models.ShortVideoComment{
 		UserID:   uid,

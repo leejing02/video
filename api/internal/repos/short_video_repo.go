@@ -255,7 +255,7 @@ func (r *ShortVideoRepo) CreateComment(c *models.ShortVideoComment) error {
 	return nil
 }
 
-func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]models.ShortVideoCommentWithUser, error) {
+func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int, parentIDs ...int64) ([]models.ShortVideoCommentWithUser, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
@@ -274,7 +274,12 @@ func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]model
 		WHERE c.video_id = ? AND c.parent_id IS NULL
 		ORDER BY c.created_at DESC
 		LIMIT ? OFFSET ?`
-	if err := r.DB.Select(&rows, q, videoID, limit, offset); err != nil {
+	args := []any{videoID, limit, offset}
+	if len(parentIDs) > 0 {
+		q = strings.Replace(q, "c.parent_id IS NULL", "c.parent_id = ?", 1)
+		args = []any{videoID, parentIDs[0], limit, offset}
+	}
+	if err := r.DB.Select(&rows, q, args...); err != nil {
 		return nil, err
 	}
 	out := make([]models.ShortVideoCommentWithUser, 0, len(rows))
@@ -288,36 +293,6 @@ func (r *ShortVideoRepo) ListComments(videoID int64, limit, offset int) ([]model
 		})
 	}
 
-	// Fetch replies
-	for i := range out {
-		replies := []models.ShortVideoCommentWithUser{}
-		replyRows := []struct {
-			models.ShortVideoComment
-			UID  int64   `db:"u_id"`
-			UNm  string  `db:"u_name"`
-			USnm string  `db:"u_username"`
-			UAv  *string `db:"u_avatar"`
-		}{}
-		rq := `
-			SELECT c.id, c.user_id, c.video_id, c.parent_id, c.content, c.likes, c.created_at,
-			       u.id AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar
-			FROM short_video_comments c
-			JOIN users u ON u.id = c.user_id
-			WHERE c.parent_id = ?
-			ORDER BY c.created_at ASC`
-		if err := r.DB.Select(&replyRows, rq, out[i].ID); err != nil {
-			return nil, err
-		}
-		for _, rr := range replyRows {
-			replies = append(replies, models.ShortVideoCommentWithUser{
-				ShortVideoComment: rr.ShortVideoComment,
-				User: &models.PublicUser{
-					ID: rr.UID, Name: rr.UNm, Username: rr.USnm, Avatar: rr.UAv,
-				},
-			})
-		}
-		out[i].Replies = replies
-	}
 	return out, nil
 }
 
