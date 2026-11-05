@@ -61,7 +61,7 @@ function startBackSwipe(event: TouchEvent) {
   if (!mobileOpen.value || !window.matchMedia('(max-width: 700px)').matches || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return
   const touch = event.touches[0]
-  backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: event.timeStamp, velocity: 0 }
+  if (touch.clientX <= 32) backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: event.timeStamp, velocity: 0 }
 }
 
 function moveBackSwipe(event: TouchEvent) {

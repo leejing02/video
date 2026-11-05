@@ -5,6 +5,9 @@ import router from './router'
 import { useAuthStore } from './stores/auth'
 import './style.css'
 import { viewportFrame } from './utils/mobile-shell'
+import { installEdgeGestureGuard } from './utils/edge-gesture'
+
+installEdgeGestureGuard()
 
 const app = createApp(App)
 const pinia = createPinia()

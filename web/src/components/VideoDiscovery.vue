@@ -285,10 +285,14 @@ function selectCategory(category: number | null) {
 function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    const entry = crypto.randomUUID()
     try {
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({ id: video.id, items: visible.value, created: Date.now() }))
+      sessionStorage.setItem('short-playback-feed', JSON.stringify({
+        id: video.id, entry, items: visible.value, created: Date.now(),
+        discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
+      }))
     } catch { /* Playback can load its selected video when storage is unavailable. */ }
-    window.location.assign(`/player.html?id=${video.id}`)
+    window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
     return
   }
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
@@ -296,10 +300,44 @@ function open(video: ShortVideo | Video, event: MouseEvent) {
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
 }
+function restorePlaybackList() {
+  if (props.kind !== 'short') return false
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+    if (!saved?.returning) return false
+    sessionStorage.removeItem('short-playback-feed')
+    const state = saved.discovery
+    if (Date.now() - saved.created > 300000 || !Array.isArray(state?.items) || !state.items.length) return false
+    videos.value = state.items
+    selected.value = displayedCategory.value = state.category ?? null
+    page.value = Math.max(1, Number(state.page) || 1)
+    more.value = !!state.more
+    query.value = typeof state.query === 'string' ? state.query : ''
+    displayedGrid.value = ++generation
+    // Hold the remembered scroll position until cover sizes have been measured.
+    const top = Math.max(0, Number(state.top) || 0)
+    let pending = true
+    const restoreScroll = () => {
+      if (!pending || disposed || !scrollArea.value) return
+      scrollArea.value.scrollTop = top
+    }
+    void nextTick(() => {
+      restoreScroll()
+      scrollArea.value?.addEventListener('load', restoreScroll, { capture: true })
+      const stop = () => {
+        pending = false
+        scrollArea.value?.removeEventListener('load', restoreScroll, true)
+      }
+      scrollArea.value?.addEventListener('touchstart', stop, { once: true, passive: true })
+      setTimeout(stop, 5000)
+    })
+    return true
+  } catch { return false }
+}
 onMounted(() => {
   document.addEventListener('visibilitychange', restoreDiscovery)
   window.addEventListener('pageshow', restoreCachedDiscovery)
-  void load()
+  if (!restorePlaybackList()) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
   void request.then(async result => {
     if (disposed) return
