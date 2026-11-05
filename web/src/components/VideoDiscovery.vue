@@ -123,6 +123,7 @@ const loading = ref(false)
 const error = ref('')
 const playerItems = ref<ShortVideo[]>([])
 const playerIndex = ref<number | null>(null)
+const playerCover = ref('')
 watch(playerIndex, index => { navigationHidden.value = index !== null }, { flush: 'sync' })
 onUnmounted(() => {
   disposed = true
@@ -259,8 +260,10 @@ function selectCategory(category: number | null) {
   selected.value = category
   void load()
 }
-function open(video: ShortVideo | Video) {
+function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
+  const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
+  playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
 }
@@ -302,7 +305,7 @@ onMounted(() => {
       <TransitionGroup v-else tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
         <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
-          <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video)" />
+          <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
         </div>
       </TransitionGroup>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
@@ -315,7 +318,7 @@ onMounted(() => {
     </div>
     </div>
     <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="playerIndex = null">
-      <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" @close="playerIndex = null" />
+      <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="playerIndex = null" />
     </div>
   </section>
 </template>

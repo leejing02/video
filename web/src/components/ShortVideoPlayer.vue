@@ -10,7 +10,7 @@ import { showToast } from '@/utils/toast'
 import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
-const props = defineProps<{ items: ShortVideo[]; initialIndex: number }>()
+const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
 defineEmits<{ close: [] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
@@ -292,10 +292,10 @@ onUnmounted(() => observer?.disconnect())
         :key="v.id"
         :data-idx="idx"
         :inert="idx !== currentIdx || undefined"
-        class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900"
+        class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="v.cover" v-efv-cover-blob="mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-cover" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-cover" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
