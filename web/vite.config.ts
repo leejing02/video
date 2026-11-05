@@ -9,6 +9,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: { main: path.resolve(__dirname, 'index.html'), player: path.resolve(__dirname, 'player.html') },
+    }
   }
 })

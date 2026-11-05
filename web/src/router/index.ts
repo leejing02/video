@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/player.html', name: 'short-playback', component: () => import('@/views/ShortPlaybackView.vue') },
     {
       path: '/login',
       name: 'login',
@@ -46,6 +47,11 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // Crossing this boundary needs a fresh document so Safari sees the initial theme.
+  if ((to.name === 'short-playback') !== document.documentElement.classList.contains('playback-document')) {
+    window.location.replace(to.fullPath)
+    return false
+  }
   if (auth.isLoggedIn && to.name === 'login') return { path: '/chat', replace: true }
   if (!auth.isLoggedIn && !to.meta.public && to.name !== 'login') {
     return { name: 'login', query: { next: to.fullPath } }

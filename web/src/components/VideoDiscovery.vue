@@ -262,6 +262,13 @@ function selectCategory(category: number | null) {
 }
 function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    try {
+      sessionStorage.setItem('short-playback-feed', JSON.stringify({ id: video.id, items: visible.value, created: Date.now() }))
+    } catch { /* Playback can load its selected video when storage is unavailable. */ }
+    window.location.assign(`/player.html?id=${video.id}`)
+    return
+  }
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
