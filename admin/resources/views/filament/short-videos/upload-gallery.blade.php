@@ -29,9 +29,9 @@
                 try {
                     for (const [order, entry] of this.files.entries()) {
                         if (entry.done) continue;
-                        const limit = 45;
-                        if (!entry.file.size || entry.file.size > limit * 1024 * 1024) {
-                            entry.status = '文件为空或超过 ' + limit + ' MB，请清空后重新选择';
+                        const limit = {{ \App\Http\Controllers\EfvGalleryUploadController::MAX_VIDEO_BYTES }};
+                        if (!entry.file.size || entry.file.size > limit) {
+                            entry.status = '文件为空或超过 5 GB，请清空后重新选择';
                             continue;
                         }
                         try {
@@ -114,7 +114,7 @@
                 <label for="gallery-files" class="block font-medium">视频文件</label>
                 <input id="gallery-files" type="file" x-ref="files" x-on:change="add" x-bind:disabled="!!batch"
                     accept=".mp4,.mkv,.avi,.dat,.mpg,.rmvb,.rm,.flv,.mpeg,.mov,.wmv,.vob,.asf,.ts" multiple>
-                <p class="text-sm">可分批选择，最多 100 个文件。单个视频限 45 MB。</p>
+                <p class="text-sm">可分批选择，最多 100 个文件。单个视频限 5 GB。</p>
                 <p role="alert" x-text="selectionError"></p>
             </div>
             <ol aria-live="polite" class="space-y-1">

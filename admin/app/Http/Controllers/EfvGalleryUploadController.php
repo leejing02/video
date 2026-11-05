@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Http;
 
 class EfvGalleryUploadController extends Controller
 {
+    public const MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024;
+
     public function __invoke(Request $request): JsonResponse
     {
         $admin = $request->user('admin');
@@ -44,7 +46,7 @@ class EfvGalleryUploadController extends Controller
             'category' => ['required', 'integer'],
             'order' => ['required', 'integer', 'between:0,99'],
             'name' => ['required', 'string', 'max:255'],
-            'size' => ['required', 'integer', 'between:1,47185920'],
+            'size' => ['required', 'integer', 'between:1,'.self::MAX_VIDEO_BYTES],
             'offset' => ['required', 'integer', 'min:0'],
             'chunk' => ['required', 'file', 'max:512'],
         ]);
@@ -59,7 +61,7 @@ class EfvGalleryUploadController extends Controller
         $key = 'efv-upload-chunk:'.$adminId;
         $path = storage_path('app/efv-upload/'.$adminId.'.part');
         $identity = [$data['batch'], $data['category'], $data['order'], $data['name'], $size];
-        $lock = Cache::lock($key.':lock', 70);
+        $lock = Cache::lock($key.':lock', 3700);
         abort_unless($lock->get(), 409, '当前有分片正在处理，请稍后重试');
 
         try {
@@ -119,6 +121,8 @@ class EfvGalleryUploadController extends Controller
 
     private function submit(array $data, UploadedFile $file, int $adminId): JsonResponse
     {
+        // The assembled video is streamed to EFV; large files need more than 60 seconds.
+        set_time_limit(3660);
         $category = Category::query()->where('type', Category::TYPE_SHORT)
             ->where('is_active', true)->findOrFail($data['category']);
         $extension = strtolower($file->getClientOriginalExtension());
@@ -131,7 +135,7 @@ class EfvGalleryUploadController extends Controller
         $http = Http::baseUrl($base)->acceptJson()->connectTimeout(5)->withoutRedirecting();
         $batch = strtolower($data['batch']);
         $batches = DB::table('efv_gallery_batches');
-        $lock = Cache::lock('efv-gallery:'.$batch, 55);
+        $lock = Cache::lock('efv-gallery:'.$batch, 3700);
         abort_unless($lock->get(), 409, '这一批文件正在上传，请稍后重试');
 
         try {
@@ -153,7 +157,7 @@ class EfvGalleryUploadController extends Controller
                 $stream = fopen($file->getPathname(), 'rb');
                 abort_unless($stream, 422, '无法读取上传文件');
                 try {
-                    $response = $http->timeout(40)->withHeaders(['token' => $config['upload_key']])
+                    $response = $http->timeout(3600)->withHeaders(['token' => $config['upload_key']])
                         ->attach('file', $stream, $file->getClientOriginalName())
                         ->post('/api/simpleupload', [
                             'originalname' => $file->getClientOriginalName(),
