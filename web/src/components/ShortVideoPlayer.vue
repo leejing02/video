@@ -331,7 +331,6 @@ onUnmounted(() => {
 
 <template>
   <div class="short-player relative flex h-full flex-col bg-black text-white">
-    <div class="player-top-bar" aria-hidden="true"></div>
     <button class="player-close" aria-label="返回视频列表" @click="$emit('close')">‹</button>
 
     <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory">
@@ -498,12 +497,6 @@ onUnmounted(() => {
 <style scoped>
 :global(html:has(.short-player)),
 :global(body:has(.short-player)) { background: #000; }
-.player-top-bar {
-  height: calc(env(safe-area-inset-top, 0px) + 56px);
-  flex-shrink: 0;
-  background: #000;
-  pointer-events: none;
-}
 .short-player .player-close {
   background: transparent;
   text-shadow: 0 1px 4px #0009;
