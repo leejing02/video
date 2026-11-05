@@ -103,10 +103,24 @@ function sourceFailed(el: HTMLVideoElement, source: VideoSource, reason: string)
   el.pause()
 }
 
+function fitMediaWidth(media: HTMLVideoElement | HTMLImageElement) {
+  const width = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth
+  const height = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight
+  const area = media.parentElement
+  if (!area || !width || !height) return
+  // Preserve the displayed height from proportional fitting, then expand only the width.
+  const fittedHeight = Math.min(area.clientHeight, area.clientWidth * height / width)
+  media.style.height = fittedHeight + 'px'
+}
+const mediaSizeObserver = new ResizeObserver(() => {
+  containerRef.value?.querySelectorAll<HTMLVideoElement | HTMLImageElement>('video, img').forEach(fitMediaWidth)
+})
+
 function mediaReady(event: Event, idx: number) {
   const el = event.currentTarget as HTMLVideoElement
   const source = streams.get(el)
   if (!source) return
+  fitMediaWidth(el)
   clearTimeout(source.timeout)
   if (idx === currentIdx.value) loadState.value = 'ready'
   updatePlayback(event, idx)
@@ -116,6 +130,7 @@ function mediaReady(event: Event, idx: number) {
 function revealVideo(event: Event) {
   const video = event.currentTarget as HTMLVideoElement
   if (streams.has(video) && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    fitMediaWidth(video)
     video.dataset.frameReady = 'true'
   }
 }
@@ -288,10 +303,12 @@ onMounted(async () => {
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
   setupObserver()
+  if (containerRef.value) mediaSizeObserver.observe(containerRef.value)
   containerRef.value?.parentElement?.querySelector<HTMLButtonElement>('.player-close')?.focus()
 })
 onUnmounted(() => {
   observer?.disconnect()
+  mediaSizeObserver.disconnect()
   pageChrome.forEach((element, index) => {
     element.style.backgroundColor = previousChrome[index].background
     element.style.colorScheme = previousChrome[index].scheme
@@ -314,11 +331,12 @@ onUnmounted(() => {
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-contain object-center bg-black" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="short-playback-cover absolute left-0 top-1/2 h-full w-full -translate-y-1/2 object-fill bg-black" @load="fitMediaWidth($event.currentTarget as HTMLImageElement)" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
           @loadedmetadata="mediaReady($event, idx)"
+          @resize="fitMediaWidth($event.currentTarget as HTMLVideoElement)"
           @durationchange="updatePlayback($event, idx)"
           @timeupdate="updatePlayback($event, idx)"
           @play="updatePlayback($event, idx)"
@@ -331,7 +349,7 @@ onUnmounted(() => {
           loop
           playsinline
           preload="metadata"
-          class="short-playback-frame absolute inset-0 h-full w-full bg-black"
+          class="short-playback-frame absolute left-0 top-1/2 h-full w-full -translate-y-1/2 bg-black"
         />
 
         <template v-if="idx === currentIdx">
@@ -477,6 +495,6 @@ onUnmounted(() => {
   text-shadow: 0 1px 4px #0009;
 }
 
-.short-playback-frame { object-fit: contain; object-position: center; }
+.short-playback-frame { object-fit: fill; object-position: center; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
 </style>
