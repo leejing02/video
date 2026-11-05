@@ -157,7 +157,7 @@ class EfvGalleryUploadController extends Controller
                         ->attach('file', $stream, $file->getClientOriginalName())
                         ->post('/api/simpleupload', [
                             'originalname' => $file->getClientOriginalName(),
-                            'category' => '新-短视频',
+                            'category' => $category->name,
                             'clientId' => $batch.':'.$order,
                         ]);
                 } finally {
