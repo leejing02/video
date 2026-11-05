@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
 import { showToast } from '@/utils/toast'
 import { playbackCoverWindow } from '@/utils/playback-window'
-import type { ShortVideo } from '@/types/models'
+import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
 const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
@@ -21,6 +21,7 @@ const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
+const latestComments = ref<Record<number, ShortVideoComment | null>>({})
 const panel = ref<'share'|'author'|null>(null)
 const preview = ref('')
 const loadState = ref<'loading' | 'ready' | 'failed'>('loading')
@@ -408,8 +409,19 @@ async function refreshInteractions() {
       likes: value.likes, favorites: value.favorites,
       comments_count: value.comments_count, shares: value.shares,
     })
+    if (value.comments_count === 0) latestComments.value[item.id] = null
+    else void refreshLatestComment(item.id, version)
   } catch {
     // Preserve known state on transient connection errors.
+  }
+}
+async function refreshLatestComment(id: number, version: number) {
+  try {
+    const result = await shortVideoApi.comments(id, { page: 1, per_page: 1 })
+    if (disposed || version !== interactionVersion || videos.value[currentIdx.value]?.id !== id) return
+    latestComments.value[id] = result.data[0] ?? null
+  } catch {
+    // Keep the last preview until the next successful refresh.
   }
 }
 watch(() => auth.user?.id, () => {
@@ -589,13 +601,13 @@ onUnmounted(() => {
             正在缓冲…
           </span>
           <div
-            class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/85 to-black/25 px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+            class="player-progress-controls"
             @click.stop
           >
             <button
               type="button"
               :aria-label="playback.paused ? '播放' : '暂停'"
-              class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black/45 focus-visible:outline focus-visible:outline-2"
+              class="progress-play"
               @click="togglePlay"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-current">
@@ -612,7 +624,7 @@ onUnmounted(() => {
               :disabled="!playback.duration"
               min="0"
               step="any"
-              class="h-8 min-w-0 flex-1 cursor-pointer touch-none accent-white disabled:cursor-default disabled:opacity-50"
+              class="progress-range"
               @input="seek"
             />
             <span aria-hidden="true" class="shrink-0 text-xs tabular-nums">
@@ -629,12 +641,18 @@ onUnmounted(() => {
           <button aria-label="分享视频" @click="share(v.id)"><PlayerIcon name="share"/><span>{{v.shares || '分享'}}</span></button>
         </div>
 
-        <!-- Video info -->
-        <div v-if="isNear(idx)" class="absolute left-4 bottom-24 right-20 text-white pointer-events-none">
-          <button class="pointer-events-auto font-semibold" @click.stop="panel='author'">@{{ v.user?.name || v.user?.username }}</button>
-          <p class="text-sm mt-1">{{ v.title }}</p>
-          <p v-if="v.description" class="text-xs text-gray-300 mt-1 line-clamp-2">{{ v.description }}</p>
+        <div v-if="isNear(idx)" class="player-info" @click.stop>
+          <button class="player-author-name" @click="panel='author'">@{{ v.user?.name || v.user?.username || '作者' }}</button>
+          <p class="player-caption">{{ v.description || v.title }}</p>
+          <button v-if="idx === currentIdx && latestComments[v.id]" class="latest-comment" aria-label="查看最新评论及全部评论" @click="openComments(v.id)">
+            <span class="latest-avatar"><AvatarContent :src="latestComments[v.id]?.user?.avatar" :name="latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username"/></span>
+            <span class="latest-comment-copy"><span class="latest-label">最新评论</span><strong>{{latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username || '用户'}}：</strong>{{latestComments[v.id]?.content}}</span>
+            <span aria-hidden="true" class="latest-chevron">›</span>
+          </button>
         </div>
+        <button v-if="idx === currentIdx" class="player-comment-entry" @click.stop="openComments(v.id)">
+          <span>发条有爱评论～</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M8 8v2m8-2v2"/></svg>
+        </button>
       </section>
 
       <div v-if="!videos.length" class="h-full flex items-center justify-center text-gray-500">暂无短视频</div>
@@ -658,7 +676,21 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.player-actions{position:absolute;right:12px;bottom:130px;display:flex;flex-direction:column;align-items:center;gap:20px;color:white;pointer-events:auto;filter:drop-shadow(0 1px 2px #0005)}.player-actions>button{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px}.player-actions svg{width:34px;height:34px;fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}.player-actions .liked{color:#ff315b}.player-actions .saved{color:#ffcf44}.player-actions .author-avatar{position:relative;display:grid;width:44px;height:44px;border-radius:50%;border:2px solid white;background:#888;margin-bottom:8px}.author-avatar :deep(img){width:100%;height:100%;object-fit:cover;border-radius:50%}.author-avatar b{position:absolute;bottom:-10px;left:8px;border-radius:12px;background:#ff315b;font-size:18px;width:25px;line-height:19px}.player-sheet-mask{position:absolute;inset:0;z-index:25;background:#0004;display:flex;flex-direction:column;justify-content:flex-end;color-scheme:light}.player-sheet{max-height:75%;overflow:auto;background:#fff;color:#161616;border-radius:22px 22px 0 0;padding-bottom:max(24px,env(safe-area-inset-bottom))}.player-sheet header{position:relative;text-align:center;padding:20px;font-size:17px}.player-sheet header>button{position:absolute;right:18px;top:10px;font-size:30px}.share-options{display:flex;gap:20px;padding:16px 22px 24px;overflow-x:auto}.share-options button{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px}.share-options i{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#f4f4f4;font-size:24px;font-style:normal}.share-options svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2}.share-options .pink{background:#ff315b;color:white}.share-options .blue{background:#25b8f2;color:white}.share-options .green{background:#05c76b;color:white}.secondary{border-top:1px solid #eee}.feature-preview{text-align:center;padding:20px}.feature-preview p{color:#999;margin:12px}.feature-preview button{color:#ff315b}.author-profile{text-align:center;padding:12px}.profile-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:#eee;display:grid;place-items:center;margin:auto;font-size:30px}.profile-avatar :deep(img){width:100%;height:100%;object-fit:cover}.author-profile h2{font-size:22px;font-weight:700;margin:12px}.author-profile p,.author-profile span{display:block;color:#888;font-size:13px}.follow-preview{margin:18px;background:#ff315b;color:#fff;padding:8px 44px;border-radius:20px}.author-work-title{padding:16px;border-top:1px solid #eee;font-weight:700}.author-works{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px}.author-works img{width:100%;aspect-ratio:3/4;object-fit:cover}.author-works span{display:block;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.player-info{position:absolute;inset:auto 0 102px;padding:14px 76px 10px 14px;background:linear-gradient(transparent,#000 14px);color:#fff}
+.player-author-name{font-size:17px;font-weight:650;text-align:left}
+.player-caption{font-size:14px;line-height:1.5;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}
+.latest-comment{display:flex;align-items:center;gap:7px;width:100%;margin-top:10px;text-align:left;color:#ddd;font-size:12px;line-height:1.5}
+.latest-avatar{width:24px;height:24px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:#333;color:#fff}
+.latest-avatar :deep(img){width:100%;height:100%;object-fit:cover}
+.latest-comment-copy{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.latest-comment-copy strong{font-weight:500}.latest-label{color:#aaa;margin-right:5px}.latest-chevron{margin-left:auto;font-size:22px;color:#aaa}
+.player-progress-controls{position:absolute;inset:auto 0 54px;z-index:2;height:48px;display:flex;align-items:center;gap:9px;padding:0 14px;background:#000}
+.progress-play{width:28px;height:32px;display:grid;place-items:center;flex:none}.progress-range{height:24px;min-width:0;flex:1;cursor:pointer;touch-action:none;accent-color:#fff}.progress-range:disabled{opacity:.5}
+.player-comment-entry{position:absolute;inset:auto 0 0;height:54px;background:#000;color:#aaa;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 14px 10px;text-align:left}
+.player-comment-entry span{flex:1;background:#26262b;border-radius:24px;padding:10px 16px;font-size:14px;line-height:18px}
+.player-comment-entry svg{position:absolute;right:29px;bottom:18px;width:21px;height:21px}
+@media(max-height:500px){.player-actions{gap:8px!important;bottom:180px!important}.player-actions svg{width:26px!important;height:26px!important}.player-info{padding-top:8px}.player-caption{-webkit-line-clamp:1}}
+
+.player-actions{position:absolute;right:12px;bottom:220px;display:flex;flex-direction:column;align-items:center;gap:20px;color:white;pointer-events:auto;filter:drop-shadow(0 1px 2px #0005)}.player-actions>button{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px}.player-actions svg{width:34px;height:34px;fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}.player-actions .liked{color:#ff315b}.player-actions .saved{color:#ffcf44}.player-actions .author-avatar{position:relative;display:grid;width:44px;height:44px;border-radius:50%;border:2px solid white;background:#888;margin-bottom:8px}.author-avatar :deep(img){width:100%;height:100%;object-fit:cover;border-radius:50%}.author-avatar b{position:absolute;bottom:-10px;left:8px;border-radius:12px;background:#ff315b;font-size:18px;width:25px;line-height:19px}.player-sheet-mask{position:absolute;inset:0;z-index:25;background:#0004;display:flex;flex-direction:column;justify-content:flex-end;color-scheme:light}.player-sheet{max-height:75%;overflow:auto;background:#fff;color:#161616;border-radius:22px 22px 0 0;padding-bottom:max(24px,env(safe-area-inset-bottom))}.player-sheet header{position:relative;text-align:center;padding:20px;font-size:17px}.player-sheet header>button{position:absolute;right:18px;top:10px;font-size:30px}.share-options{display:flex;gap:20px;padding:16px 22px 24px;overflow-x:auto}.share-options button{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px}.share-options i{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#f4f4f4;font-size:24px;font-style:normal}.share-options svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2}.share-options .pink{background:#ff315b;color:white}.share-options .blue{background:#25b8f2;color:white}.share-options .green{background:#05c76b;color:white}.secondary{border-top:1px solid #eee}.feature-preview{text-align:center;padding:20px}.feature-preview p{color:#999;margin:12px}.feature-preview button{color:#ff315b}.author-profile{text-align:center;padding:12px}.profile-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:#eee;display:grid;place-items:center;margin:auto;font-size:30px}.profile-avatar :deep(img){width:100%;height:100%;object-fit:cover}.author-profile h2{font-size:22px;font-weight:700;margin:12px}.author-profile p,.author-profile span{display:block;color:#888;font-size:13px}.follow-preview{margin:18px;background:#ff315b;color:#fff;padding:8px 44px;border-radius:20px}.author-work-title{padding:16px;border-top:1px solid #eee;font-weight:700}.author-works{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px}.author-works img{width:100%;aspect-ratio:3/4;object-fit:cover}.author-works span{display:block;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 
 :global(html:has(.short-player)),
 :global(body:has(.short-player)) { background: #000; }

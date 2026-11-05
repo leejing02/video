@@ -9,4 +9,4 @@ const paths: Record<string,string> = {
  user:'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM3 22v-2a9 9 0 0 1 18 0v2',
 }
 </script>
-<template><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="paths[name] || paths.share" /></svg></template>
+<template><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="paths[name] || paths.share" /><g v-if="name==='comment'" fill="#29292d" stroke="none"><circle cx="7" cy="10" r="1.2"/><circle cx="12" cy="10" r="1.2"/><circle cx="17" cy="10" r="1.2"/></g></svg></template>
