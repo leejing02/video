@@ -470,6 +470,11 @@ async function favorite(id: number) {
   }
 }
 
+function openPersonalCenter() {
+  containerRef.value?.querySelectorAll('video').forEach(video => video.pause())
+  location.assign('/me')
+}
+
 function share(_id: number) { panel.value='share'; preview.value='' }
 function openComments(_id: number) { showComments.value=true;void refreshInteractions() }
 async function copyLink() {
@@ -641,15 +646,16 @@ onUnmounted(() => {
           <button aria-label="分享视频" @click="share(v.id)"><PlayerIcon name="share"/><span>{{v.shares || '分享'}}</span></button>
         </div>
 
-        <div v-if="isNear(idx)" class="player-info" @click.stop>
-          <button class="player-author-name" @click="panel='author'">@{{ v.user?.name || v.user?.username || '作者' }}</button>
-          <p class="player-caption">{{ v.description || v.title }}</p>
-          <button v-if="idx === currentIdx && latestComments[v.id]" class="latest-comment" aria-label="查看最新评论及全部评论" @click="openComments(v.id)">
-            <span class="latest-avatar"><AvatarContent :src="latestComments[v.id]?.user?.avatar" :name="latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username"/></span>
-            <span class="latest-comment-copy"><span class="latest-label">最新评论</span><strong>{{latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username || '用户'}}：</strong>{{latestComments[v.id]?.content}}</span>
-            <span aria-hidden="true" class="latest-chevron">›</span>
-          </button>
-        </div>
+        <button v-if="idx === currentIdx" class="player-info" aria-label="查看评论信息" @click.stop="openComments(v.id)">
+          <template v-if="latestComments[v.id]">
+            <span class="player-comment-name">@{{latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username || '用户'}}</span>
+            <span class="player-comment-content">{{latestComments[v.id]?.content}}</span>
+          </template>
+          <template v-else><span class="player-comment-name">评论</span><span class="player-comment-content">暂无评论，来说点什么吧</span></template>
+        </button>
+        <button v-if="idx === currentIdx" class="player-personal-center" aria-label="进入个人中心" @click.stop="openPersonalCenter">
+          <span><AvatarContent :src="auth.user?.avatar" :name="auth.user?.name || auth.user?.username"/></span>
+        </button>
         <button v-if="idx === currentIdx" class="player-comment-entry" @click.stop="openComments(v.id)">
           <span>发条有爱评论～</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M8 8v2m8-2v2"/></svg>
         </button>
@@ -676,19 +682,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.player-info{position:absolute;inset:auto 0 102px;padding:14px 76px 10px 14px;background:linear-gradient(transparent,#000 14px);color:#fff}
-.player-author-name{font-size:17px;font-weight:650;text-align:left}
-.player-caption{font-size:14px;line-height:1.5;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}
-.latest-comment{display:flex;align-items:center;gap:7px;width:100%;margin-top:10px;text-align:left;color:#ddd;font-size:12px;line-height:1.5}
-.latest-avatar{width:24px;height:24px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:#333;color:#fff}
-.latest-avatar :deep(img){width:100%;height:100%;object-fit:cover}
-.latest-comment-copy{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.latest-comment-copy strong{font-weight:500}.latest-label{color:#aaa;margin-right:5px}.latest-chevron{margin-left:auto;font-size:22px;color:#aaa}
+.player-info{position:absolute;left:14px;right:76px;bottom:102px;padding:14px 0 10px;background:linear-gradient(transparent,#000 14px);color:#fff;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:64px}
+.player-comment-name{font-size:17px;font-weight:650}
+.player-comment-content{font-size:14px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}
+.player-personal-center{position:absolute;right:12px;bottom:112px;width:48px;height:48px;padding:9px;border-radius:50%;background:radial-gradient(circle at 30% 20%,#454545,#151515 70%);display:grid;place-items:center}
+.player-personal-center>span{width:30px;height:30px;border-radius:50%;overflow:hidden;background:#333;display:grid;place-items:center;color:#fff;font-size:13px}
+.player-personal-center :deep(img){width:100%;height:100%;object-fit:cover}
 .player-progress-controls{position:absolute;inset:auto 0 54px;z-index:2;height:48px;display:flex;align-items:center;gap:9px;padding:0 14px;background:#000}
 .progress-play{width:28px;height:32px;display:grid;place-items:center;flex:none}.progress-range{height:24px;min-width:0;flex:1;cursor:pointer;touch-action:none;accent-color:#fff}.progress-range:disabled{opacity:.5}
 .player-comment-entry{position:absolute;inset:auto 0 0;height:54px;background:#000;color:#aaa;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 14px 10px;text-align:left}
 .player-comment-entry span{flex:1;background:#26262b;border-radius:24px;padding:10px 16px;font-size:14px;line-height:18px}
 .player-comment-entry svg{position:absolute;right:29px;bottom:18px;width:21px;height:21px}
-@media(max-height:500px){.player-actions{gap:8px!important;bottom:180px!important}.player-actions svg{width:26px!important;height:26px!important}.player-info{padding-top:8px}.player-caption{-webkit-line-clamp:1}}
+@media(max-height:500px){.player-actions{gap:8px!important;bottom:180px!important}.player-actions svg{width:26px!important;height:26px!important}.player-info{padding-top:8px}.player-comment-content{-webkit-line-clamp:1}}
 
 .player-actions{position:absolute;right:12px;bottom:220px;display:flex;flex-direction:column;align-items:center;gap:20px;color:white;pointer-events:auto;filter:drop-shadow(0 1px 2px #0005)}.player-actions>button{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px}.player-actions svg{width:34px;height:34px;fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}.player-actions .liked{color:#ff315b}.player-actions .saved{color:#ffcf44}.player-actions .author-avatar{position:relative;display:grid;width:44px;height:44px;border-radius:50%;border:2px solid white;background:#888;margin-bottom:8px}.author-avatar :deep(img){width:100%;height:100%;object-fit:cover;border-radius:50%}.author-avatar b{position:absolute;bottom:-10px;left:8px;border-radius:12px;background:#ff315b;font-size:18px;width:25px;line-height:19px}.player-sheet-mask{position:absolute;inset:0;z-index:25;background:#0004;display:flex;flex-direction:column;justify-content:flex-end;color-scheme:light}.player-sheet{max-height:75%;overflow:auto;background:#fff;color:#161616;border-radius:22px 22px 0 0;padding-bottom:max(24px,env(safe-area-inset-bottom))}.player-sheet header{position:relative;text-align:center;padding:20px;font-size:17px}.player-sheet header>button{position:absolute;right:18px;top:10px;font-size:30px}.share-options{display:flex;gap:20px;padding:16px 22px 24px;overflow-x:auto}.share-options button{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px}.share-options i{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:#f4f4f4;font-size:24px;font-style:normal}.share-options svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2}.share-options .pink{background:#ff315b;color:white}.share-options .blue{background:#25b8f2;color:white}.share-options .green{background:#05c76b;color:white}.secondary{border-top:1px solid #eee}.feature-preview{text-align:center;padding:20px}.feature-preview p{color:#999;margin:12px}.feature-preview button{color:#ff315b}.author-profile{text-align:center;padding:12px}.profile-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:#eee;display:grid;place-items:center;margin:auto;font-size:30px}.profile-avatar :deep(img){width:100%;height:100%;object-fit:cover}.author-profile h2{font-size:22px;font-weight:700;margin:12px}.author-profile p,.author-profile span{display:block;color:#888;font-size:13px}.follow-preview{margin:18px;background:#ff315b;color:#fff;padding:8px 44px;border-radius:20px}.author-work-title{padding:16px;border-top:1px solid #eee;font-weight:700}.author-works{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px}.author-works img{width:100%;aspect-ratio:3/4;object-fit:cover}.author-works span{display:block;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 
