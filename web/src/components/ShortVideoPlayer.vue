@@ -275,7 +275,7 @@ const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-col
 let previousThemeColor: string | null = null
 onMounted(async () => {
   previousThemeColor = themeColor?.getAttribute('content') ?? null
-  themeColor?.setAttribute('content', 'transparent')
+  themeColor?.setAttribute('content', '#000000')
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
   setupObserver()
@@ -300,7 +300,7 @@ onUnmounted(() => {
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-fill bg-black" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-contain object-center bg-black" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
@@ -452,11 +452,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+:global(html:has(.short-player)),
+:global(body:has(.short-player)) { background: #000; }
 .short-player .player-close {
   background: transparent;
   text-shadow: 0 1px 4px #0009;
 }
 
-.short-playback-frame { object-fit: fill; }
+.short-playback-frame { object-fit: contain; object-position: center; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
 </style>
