@@ -16,7 +16,7 @@ class EfvShortVideoImport
 {
     public const CATEGORY = '国产短视频';
 
-    public function run(EfvShortVideoSync $sync, bool $preview, callable $progress, bool $cms = false): array
+    public function run(EfvShortVideoSync $sync, bool $preview, callable $progress, bool $cms = false, bool $reconcile = false): array
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $key = config('services.efv.api_key');
@@ -50,7 +50,19 @@ class EfvShortVideoImport
             } else {
                 $http->withHeaders(['token' => $key]);
             }
-            $stats = ['eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
+            $imported = [];
+            foreach (DB::table('efv_gallery_batches')->where('section', 'category-import')->cursor() as $batch) {
+                foreach (json_decode($batch->files, true) ?? [] as $file) {
+                    if (isset($file['efv_id'], $file['video_id'])) {
+                        $imported[$file['efv_id']][] = (int) $file['video_id'];
+                    }
+                }
+            }
+            $seen = [];
+            $expectedTotal = null;
+            $expectedPages = null;
+            $scanned = 0;
+            $stats = ['updated' => 0, 'archived' => 0, 'eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
             for ($page = 1; ; $page++) {
                 try {
                     $response = $cms
@@ -73,6 +85,26 @@ class EfvShortVideoImport
                     throw new DomainException("EFV 第 {$page} 页返回异常，请检查 API 设置。");
                 }
 
+                if ($reconcile) {
+                    $total = filter_var($response->json('total'), FILTER_VALIDATE_INT);
+                    if ($total === false || $total < 0
+                        || ($expectedTotal !== null && $expectedTotal !== $total)
+                        || ($expectedPages !== null && $expectedPages !== $pageCount)
+                        || ($total > 0 && !$movies)) {
+                        throw new DomainException('采集分页或总数发生变化，已停止同步下架，请重新执行。');
+                    }
+                    $expectedTotal = $total;
+                    $expectedPages = $pageCount;
+                    foreach ($movies as $entry) {
+                        $sourceId = $cms ? ($entry['vod_id'] ?? null) : ($entry['_id'] ?? null);
+                        if (!is_string($sourceId) || !preg_match('/^[a-f0-9]{24}$/D', $sourceId) || isset($seen[$sourceId])) {
+                            throw new DomainException('采集记录 ID 异常或分页重复，已停止同步下架。');
+                        }
+                        $seen[$sourceId] = true;
+                        $scanned++;
+                    }
+                }
+
                 $new = [];
                 foreach ($movies as $movie) {
                     if ($cms) {
@@ -89,6 +121,29 @@ class EfvShortVideoImport
                     }
                     if (isset($known[$id])) {
                         $stats['existing']++;
+                        if ($reconcile) {
+                            foreach ($imported[$id] ?? [] as $videoId) {
+                                $video = Video::query()->where('type', Video::TYPE_SHORT)->find($videoId);
+                                if (!$video) {
+                                    continue;
+                                }
+                                $stats['updated']++;
+                                if (!$preview) {
+                                    try {
+                                        $sync->applyTranscodedMovie($video, $movie, refreshCover: blank($video->cover));
+                                        $video->update([
+                                            'title' => Str::limit(trim((string) ($movie['originalname'] ?? '')) ?: '未命名短视频', 150, ''),
+                                            'description' => Str::limit((string) ($movie['summary'] ?? ''), 500, ''),
+                                        ]);
+                                        Cache::forget(EfvShortVideoSync::frontendCoverCacheKey(
+                                            $video->id, app(EfvMediaDomains::class)->read()['image_origin'],
+                                        ));
+                                    } catch (DomainException) {
+                                        $stats['pending']++;
+                                    }
+                                }
+                            }
+                        }
                         continue;
                     }
                     $known[$id] = true;
@@ -114,6 +169,22 @@ class EfvShortVideoImport
 
                 $progress($page, $pageCount, $stats);
                 if ($page >= $pageCount) {
+                    if ($reconcile) {
+                        if ($scanned !== $expectedTotal) {
+                            throw new DomainException('采集数量与接口总数不一致，已停止同步下架，请重新执行。');
+                        }
+                        $missing = [];
+                        foreach ($imported as $sourceId => $videoIds) {
+                            if (!isset($seen[$sourceId])) {
+                                array_push($missing, ...$videoIds);
+                            }
+                        }
+                        foreach (array_chunk(array_unique($missing), 500) as $ids) {
+                            $query = Video::query()->where('type', Video::TYPE_SHORT)->whereIn('id', $ids)
+                                ->where('status', '!=', Video::STATUS_ARCHIVED);
+                            $stats['archived'] += $preview ? $query->count() : $query->update(['status' => Video::STATUS_ARCHIVED]);
+                        }
+                    }
                     return $stats;
                 }
             }
@@ -153,17 +224,21 @@ class EfvShortVideoImport
             'm3u8paths' => $streams,
             'poster' => $movie['vod_pic'] ?? null,
             'poster2' => ['url' => $movie['vod_pic_slide'] ?? null],
-            'time' => preg_match('/^\d{1,4}:\d{2}:\d{2}$/D', $duration) ? $duration : '',
+            'time' => preg_match('/^\d{1,4}:\d{2}:\d{2}$/D', $duration) || is_numeric($duration) ? $duration : '',
         ];
     }
 
     private function recordBatch(array $movies): array
     {
         return DB::transaction(function () use ($movies) {
-            $category = Category::firstOrCreate(
-                ['type' => Category::TYPE_SHORT, 'name' => self::CATEGORY],
-                ['is_active' => true, 'sort' => 0],
-            );
+            $category = Category::query()->where('type', Category::TYPE_SHORT)
+                ->whereIn('id', DB::table('efv_gallery_batches')->where('section', 'category-import')->select('category_id'))
+                ->first()
+                ?? Category::query()->where('type', Category::TYPE_SHORT)->where('name', '国产')->first()
+                ?? Category::firstOrCreate(
+                    ['type' => Category::TYPE_SHORT, 'name' => self::CATEGORY],
+                    ['is_active' => true, 'sort' => 0],
+                );
             if (!$category->is_active) {
                 throw new DomainException('本站「国产短视频」分类已停用，请先启用。');
             }

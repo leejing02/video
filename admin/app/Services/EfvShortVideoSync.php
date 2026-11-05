@@ -89,7 +89,7 @@ class EfvShortVideoSync
         return $movie;
     }
 
-    public function applyTranscodedMovie(Video $video, array $movie, bool $automatic = false): ?string
+    public function applyTranscodedMovie(Video $video, array $movie, bool $automatic = false, bool $refreshCover = true): ?string
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $url = collect($movie['m3u8paths'] ?? [])->sortByDesc('hd')
@@ -101,7 +101,7 @@ class EfvShortVideoSync
 
         $covers = $this->coverCandidates($movie);
         $imageOrigin = app(EfvMediaDomains::class)->read()['image_origin'];
-        $replaceCover = $this->canReplaceCover($video, $covers, $automatic);
+        $replaceCover = $refreshCover && $this->canReplaceCover($video, $covers, $automatic);
         $cover = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
