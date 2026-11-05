@@ -271,13 +271,20 @@ async function sendComment() {
 const currentVideo = computed(() => videos.value[currentIdx.value] ?? null)
 const currentState = computed(() => currentVideo.value ? (states.value[currentVideo.value.id] ?? { liked: false, favorited: false }) : { liked: false, favorited: false })
 
+const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+let previousThemeColor: string | null = null
 onMounted(async () => {
+  previousThemeColor = themeColor?.getAttribute('content') ?? null
+  themeColor?.setAttribute('content', 'transparent')
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
   setupObserver()
   containerRef.value?.parentElement?.querySelector<HTMLButtonElement>('.player-close')?.focus()
 })
-onUnmounted(() => observer?.disconnect())
+onUnmounted(() => {
+  observer?.disconnect()
+  if (previousThemeColor !== null) themeColor?.setAttribute('content', previousThemeColor)
+})
 </script>
 
 <template>
@@ -445,6 +452,11 @@ onUnmounted(() => observer?.disconnect())
 </template>
 
 <style scoped>
+.short-player .player-close {
+  background: transparent;
+  text-shadow: 0 1px 4px #0009;
+}
+
 .short-playback-frame { object-fit: fill; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
 </style>
