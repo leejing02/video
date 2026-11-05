@@ -5,6 +5,7 @@ import type Hls from 'hls.js'
 import PlayerIcon from './PlayerIcon.vue'
 import AvatarContent from './AvatarContent.vue'
 import PlayerComments from './PlayerComments.vue'
+import CommentDanmaku from './CommentDanmaku.vue'
 import { mediaUrl } from '@/utils/media-url'
 import { vEfvCoverBlob, prefetchCover } from '@/utils/efv-cover-blob'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +23,13 @@ const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
 const latestComments = ref<Record<number, ShortVideoComment | null>>({})
+const danmakuComments = ref<Record<number, ShortVideoComment[]>>({})
+const danmakuEnabled = ref(false)
+const pageVisible = ref(!document.hidden)
+function toggleDanmaku() {
+  danmakuEnabled.value = !danmakuEnabled.value
+  try { localStorage.setItem('short-video-danmaku', String(danmakuEnabled.value)) } catch { /* Optional preference. */ }
+}
 const panel = ref<'share'|'author'|null>(null)
 const preview = ref('')
 const loadState = ref<'loading' | 'ready' | 'failed'>('loading')
@@ -143,7 +151,7 @@ function resumePlayback() {
     if (resumePlaying) void playVideo(video, true)
   })
 }
-function onVisibility() { if (document.hidden) suspendPlayback(); else {resumePlayback();void refreshInteractions()} }
+function onVisibility() { pageVisible.value = !document.hidden; if (document.hidden) suspendPlayback(); else {resumePlayback();void refreshInteractions()} }
 function onPageShow(event: PageTransitionEvent) { if (event.persisted) resumePlayback() }
 
 function updatePlayback(event: Event, idx: number) {
@@ -409,7 +417,10 @@ async function refreshInteractions() {
       likes: value.likes, favorites: value.favorites,
       comments_count: value.comments_count, shares: value.shares,
     })
-    if (value.comments_count === 0) latestComments.value[item.id] = null
+    if (value.comments_count === 0) {
+      latestComments.value[item.id] = null
+      danmakuComments.value[item.id] = []
+    }
     else void refreshLatestComment(item.id, version)
   } catch {
     // Preserve known state on transient connection errors.
@@ -417,9 +428,10 @@ async function refreshInteractions() {
 }
 async function refreshLatestComment(id: number, version: number) {
   try {
-    const result = await shortVideoApi.comments(id, { page: 1, per_page: 1 })
+    const result = await shortVideoApi.comments(id, { page: 1, per_page: 20 })
     if (disposed || version !== interactionVersion || videos.value[currentIdx.value]?.id !== id) return
     latestComments.value[id] = result.data[0] ?? null
+    danmakuComments.value[id] = result.data
   } catch {
     // Keep the last preview until the next successful refresh.
   }
@@ -504,6 +516,7 @@ const previousChrome = pageChrome.map(element => ({
   scheme: element.style.colorScheme,
 }))
 onMounted(async () => {
+  try { danmakuEnabled.value = localStorage.getItem('short-video-danmaku') === 'true' } catch { /* Optional preference. */ }
   interactionTimer=setInterval(()=>{void refreshInteractions()},15000)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pagehide', suspendPlayback)
@@ -646,6 +659,11 @@ onUnmounted(() => {
           <button aria-label="分享视频" @click="share(v.id)"><PlayerIcon name="share"/><span>{{v.shares || '分享'}}</span></button>
         </div>
 
+        <CommentDanmaku v-if="idx === currentIdx && danmakuEnabled" :key="v.id" :comments="danmakuComments[v.id] || []" :paused="playback.paused || playback.waiting || !pageVisible || showComments || panel !== null"/>
+        <div v-if="idx === currentIdx" class="player-extras" @click.stop>
+          <button class="danmaku-toggle" :class="{enabled:danmakuEnabled}" :aria-pressed="danmakuEnabled" :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'" @click="toggleDanmaku">弹<span aria-hidden="true">{{danmakuEnabled?'✓':'╱'}}</span></button>
+          <button class="recommend-button" :class="{liked:currentState.liked}" :aria-pressed="currentState.liked" :disabled="interactionBusy" aria-label="点赞推荐" @click="like(v.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h4v11H3zM9 21V10l5-8c3 0 3 3 1 7h5c2 0 2 2 1 5l-2 7z"/></svg>{{v.likes}} 人推荐<span aria-hidden="true">›</span></button>
+        </div>
         <button v-if="idx === currentIdx" class="player-info" aria-label="查看评论信息" @click.stop="openComments(v.id)">
           <template v-if="latestComments[v.id]">
             <span class="player-comment-name">@{{latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username || '用户'}}</span>
@@ -682,6 +700,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.player-extras{position:absolute;left:14px;bottom:205px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.danmaku-toggle,.recommend-button{background:#242424b3;color:#fff;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:4px;min-height:32px;padding:4px 8px;font-size:12px}
+.danmaku-toggle{font-size:15px;font-weight:600}.danmaku-toggle span{font-size:10px}.danmaku-toggle.enabled{color:#fff;background:#555c}
+.recommend-button svg{width:15px;height:15px;fill:currentColor}.recommend-button.liked{color:#ff315b}.recommend-button>span{font-size:20px;line-height:16px}.recommend-button:disabled{opacity:.6}
+
 .player-info{position:absolute;left:14px;right:76px;bottom:102px;padding:14px 0 10px;background:linear-gradient(transparent,#000 14px);color:#fff;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:64px}
 .player-comment-name{font-size:17px;font-weight:650}
 .player-comment-content{font-size:14px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}
