@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, inject, watch, type Re
 import { useAuthStore } from '@/stores/auth'
 import { chatApi } from '@/api/chat'
 import { WsClient } from '@/utils/ws'
+import { singleFlight } from '@/utils/single-flight'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import AvatarContent from '@/components/AvatarContent.vue'
@@ -60,7 +61,7 @@ function startBackSwipe(event: TouchEvent) {
   if (!mobileOpen.value || !window.matchMedia('(max-width: 700px)').matches || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return
   const touch = event.touches[0]
-  if (touch.clientX <= 32) backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: event.timeStamp, velocity: 0 }
+  backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: event.timeStamp, velocity: 0 }
 }
 
 function moveBackSwipe(event: TouchEvent) {
@@ -116,10 +117,15 @@ function endBackSwipe(event: TouchEvent) {
   swipeTimer = setTimeout(returnToConversations, swipeDuration.value + 20)
 }
 
-function merge(id: number, incoming: Message[]) {
+function merge(id: number, incoming: Message[], history = false) {
   const values = new Map((cache.value[id] ?? []).map(item => [item.id, item]))
   for (const item of incoming) if (item.chat_room_id === id) values.set(item.id, item)
-  cache.value[id] = [...values.values()].sort((a, b) => a.id - b.id)
+  const sorted = [...values.values()].sort((a, b) => a.id - b.id)
+  const active = selected.value === id && mobileOpen.value
+  const nearBottom = !scrollEl.value || scrollEl.value.scrollHeight - scrollEl.value.scrollTop - scrollEl.value.clientHeight < 100
+  const limit = active ? (!history && nearBottom ? 500 : 0) : 200
+  cache.value[id] = limit ? sorted.slice(-limit) : sorted
+  if (limit && sorted.length > limit) exhausted.value[id] = false
 }
 function bottom() { scrollEl.value?.scrollTo({ top: scrollEl.value.scrollHeight }) }
 async function refreshRooms() {
@@ -131,12 +137,15 @@ async function markRead(id: number) {
   try { await chatApi.markRead(id); const item = rooms.value.find(r => r.id === id); if (item) item.unread_count = 0 } catch {}
 }
 async function catchUp(id: number, start?: number) {
-  let cursor = start ?? 0
-  while (!disposed) {
+  if (start === undefined) return
+  let cursor = start
+  for (let pageNumber = 0; pageNumber < 10 && !disposed && !document.hidden && selected.value === id; pageNumber++) {
     const page = await chatApi.messagesAfter(id, cursor)
     merge(id, page)
     if (page.length < 100) break
-    cursor = page[page.length - 1].id
+    const next = page[page.length - 1].id
+    if (next <= cursor) break
+    cursor = next
   }
 }
 async function selectRoom(item: ChatRoom) {
@@ -170,7 +179,7 @@ async function older() {
   olderLoading.value = true
   try {
     const page = await chatApi.messages(id, messages.value[0].id, 50)
-    merge(id, page); exhausted.value[id] = page.length < 50
+    merge(id, page, true); exhausted.value[id] = page.length < 50
     await nextTick()
     if (version === selectionVersion && scrollEl.value) scrollEl.value.scrollTop = top + scrollEl.value.scrollHeight - height
   } catch { if (version === selectionVersion) error.value = '历史消息加载失败，请重试' }
@@ -197,15 +206,22 @@ async function direct(message: Message) {
     if (target) await selectRoom(target)
   } catch (e: any) { error.value = e.response?.data?.error || '暂时无法发起私聊' }
 }
-async function recover() {
+const recover = singleFlight(async () => {
+  if (disposed || document.hidden) return
   try {
     const id = selected.value
     const cursor = id === null ? undefined : cache.value[id]?.slice(-1)[0]?.id
     await refreshRooms()
     if (id !== null) { await catchUp(id, cursor); if (selected.value === id && mobileOpen.value) await markRead(id) }
   } catch { error.value = '消息同步暂时失败，正在重试' }
+})
+function onVisible() {
+  clearTimeout(swipeTimer)
+  cancelBackSwipe()
+  if (swipeClosing.value) returnToConversations()
+  if (!document.hidden) { socket.reconnect(); void recover() }
 }
-function onVisible() { if (!document.hidden) { socket.reconnect(); void recover() } }
+function onPageShow(event: PageTransitionEvent) { if (event.persisted) onVisible() }
 function time(value: string | null) { return value ? new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '' }
 
 onMounted(async () => {
@@ -229,8 +245,9 @@ onMounted(async () => {
   if (disposed) return
   refreshTimer = setInterval(() => { void recover() }, 15000)
   document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('pageshow', onPageShow)
 })
-onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible) })
+onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disposed = true; selectionVersion++; cleanups.forEach(fn => fn()); socket.disconnect(); clearInterval(refreshTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('pageshow', onPageShow) })
 </script>
 
 <template>

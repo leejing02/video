@@ -53,3 +53,28 @@ window.addEventListener('pageshow', () => {
 })
 document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false })
 document.addEventListener('gesturechange', event => event.preventDefault(), { passive: false })
+
+// Custom chat/category gestures handle movement themselves. Prevent a horizontal
+// drag elsewhere from moving the document; keep text editing and category scrolling native.
+let horizontalStart: { id: number; x: number; y: number } | undefined
+const clearHorizontalStart = () => { horizontalStart = undefined }
+document.addEventListener('touchstart', event => {
+  clearHorizontalStart()
+  if (event.touches.length !== 1) return
+  if (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable],.category-strip')) return
+  const touch = event.touches[0]
+  horizontalStart = { id: touch.identifier, x: touch.clientX, y: touch.clientY }
+}, { passive: true })
+document.addEventListener('touchmove', event => {
+  const start = horizontalStart
+  if (!start || event.touches.length !== 1) return
+  const touch = event.touches[0]
+  if (touch.identifier !== start.id) return
+  const dx = Math.abs(touch.clientX - start.x)
+  const dy = Math.abs(touch.clientY - start.y)
+  if (dx > 12 && dx > dy * 1.3 && event.cancelable) event.preventDefault()
+}, { passive: false })
+document.addEventListener('touchend', clearHorizontalStart, { passive: true })
+document.addEventListener('touchcancel', clearHorizontalStart, { passive: true })
+document.addEventListener('visibilitychange', clearHorizontalStart)
+window.addEventListener('pageshow', clearHorizontalStart)
