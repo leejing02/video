@@ -35,7 +35,7 @@
         image.src = saved.cover
         layer.append(image)
         document.body.append(layer)
-        // The player removes this only after its cover or first frame is ready.
+        setTimeout(() => layer.remove(), 10000)
       }
     } catch { /* Direct playback and private storage restrictions use the normal loader. */ }
   </script>

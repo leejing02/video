@@ -486,7 +486,6 @@ onUnmounted(() => {
 
 <template>
   <div class="short-player relative flex h-full flex-col bg-black text-white"
-    :data-returning="backOffset > 0"
     :style="{ transform: `translate3d(${backOffset}px,0,0)`, transition: backDragging ? 'none' : `transform ${backDuration}ms cubic-bezier(.16,1,.3,1)` }"
     @touchstart.passive="startBack" @touchmove="moveBack" @touchend.passive="endBack" @touchcancel.passive="cancelBack">
     <button class="player-close" aria-label="返回视频列表" @click="closePlayer">‹</button>

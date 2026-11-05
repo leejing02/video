@@ -5,7 +5,6 @@ import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
-import { portablePlaybackCover } from '@/utils/playback-cover'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
@@ -291,30 +290,9 @@ function closePlayer() {
     if (scrollArea.value) scrollArea.value.scrollTop = listScrollTop
   })
 }
-let openingPlayback = false
-async function open(video: ShortVideo | Video, event: MouseEvent) {
+function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
-  if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-    openingPlayback = true
-    const entry = crypto.randomUUID()
-    const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(),
-      discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
-    }
-    const cover = await portablePlaybackCover(poster)
-    if (disposed) return
-    try {
-      // The initial HTML can paint these bytes before loading the Vue bundle.
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
-      window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
-      return
-    } catch {
-      // Restricted/full storage must not open a document with a lost cover or return position.
-      openingPlayback = false
-    }
-  }
   listScrollTop = scrollArea.value?.scrollTop ?? 0
   listViewportHeight.value = scrollArea.value?.closest('.discovery-browse')?.clientHeight ?? 0
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
