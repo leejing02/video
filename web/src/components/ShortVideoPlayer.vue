@@ -497,6 +497,9 @@ onUnmounted(() => {
 <style scoped>
 :global(html:has(.short-player)),
 :global(body:has(.short-player)) { background: #000; }
+/* Safari 26 can preserve the previous chrome color for full-viewport fixed layers. */
+:global(body:has(.short-player)) { position: static; }
+:global(body:has(.short-player) #app) { position: absolute; }
 .short-player .player-close {
   background: transparent;
   text-shadow: 0 1px 4px #0009;
