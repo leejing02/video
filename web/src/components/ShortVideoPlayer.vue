@@ -3,15 +3,16 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { ObjectDirective } from 'vue'
 import type Hls from 'hls.js'
 import { mediaUrl } from '@/utils/media-url'
-import { vEfvCoverBlob } from '@/utils/efv-cover-blob'
+import { vEfvCoverBlob, prefetchCover } from '@/utils/efv-cover-blob'
 import { useAuthStore } from '@/stores/auth'
 import { shortVideoApi } from '@/api/shortVideo'
 import { showToast } from '@/utils/toast'
+import { playbackCoverWindow } from '@/utils/playback-window'
 import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
 const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
-defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
@@ -23,6 +24,124 @@ const isSending = ref(false)
 const loadState = ref<'loading' | 'ready' | 'failed'>('loading')
 const loadError = ref('')
 const playback = ref({ paused: true, current: 0, duration: 0, waiting: false })
+const backOffset = ref(0)
+const backDragging = ref(false)
+const backDuration = ref(220)
+let backClosing = false
+let backSettling = false
+let backTimer: ReturnType<typeof setTimeout> | undefined
+let backTouch: { id: number; x: number; y: number; lastX: number; time: number; velocity: number } | undefined
+let ignoreClickUntil = 0
+let disposed = false
+let suspended = false
+let manuallyPaused = false
+let resumePlaying = false
+
+function cancelBack() {
+  backTouch = undefined
+  backDragging.value = false
+  backOffset.value = 0
+}
+function closePlayer() {
+  if (backClosing) return
+  backClosing = true
+  containerRef.value?.querySelectorAll('video').forEach(video => video.pause())
+  emit('close')
+}
+function startBack(event: TouchEvent) {
+  if (backClosing || backSettling || showComments.value || event.touches.length !== 1) return
+  if (event.target instanceof Element && event.target.closest('button,input,textarea,a')) return
+  const touch = event.touches[0]
+  if (touch.clientX > 32) return
+  backTouch = { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastX: touch.clientX, time: event.timeStamp, velocity: 0 }
+}
+function moveBack(event: TouchEvent) {
+  const start = backTouch
+  if (!start) return
+  const touch = event.touches[0]
+  if (event.touches.length !== 1 || touch.identifier !== start.id) return cancelBack()
+  const dx = touch.clientX - start.x
+  const dy = Math.abs(touch.clientY - start.y)
+  if (!backDragging.value && dy > 12 && dy >= dx) return cancelBack()
+  if (backDragging.value || (dx > 8 && dx > dy * 1.3)) {
+    if (event.cancelable) event.preventDefault()
+    backDragging.value = true
+    backOffset.value = Math.max(0, Math.min(dx - 6, window.innerWidth))
+    const elapsed = event.timeStamp - start.time
+    if (elapsed > 0) start.velocity = (touch.clientX - start.lastX) / elapsed
+    start.lastX = touch.clientX
+    start.time = event.timeStamp
+  }
+}
+function endBack(event: TouchEvent) {
+  const start = backTouch
+  const wasDragging = backDragging.value
+  backTouch = undefined
+  backDragging.value = false
+  if (!start || !wasDragging) return cancelBack()
+  ignoreClickUntil = performance.now() + 350
+  const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id)
+  const dx = touch ? touch.clientX - start.x : 0
+  const dy = touch ? Math.abs(touch.clientY - start.y) : Infinity
+  const speed = event.timeStamp - start.time < 80 ? Math.max(0, start.velocity) : 0
+  if (dx < 32 || dx < dy * 1.5 || backOffset.value + Math.min(speed, 2) * 85 < Math.min(100, window.innerWidth * .24)) {
+    backDuration.value = 180
+    return cancelBack()
+  }
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return closePlayer()
+  backDuration.value = Math.min(300, Math.max(120, (window.innerWidth - backOffset.value) / Math.max(.95, speed)))
+  backSettling = true
+  backOffset.value = window.innerWidth
+  backTimer = setTimeout(closePlayer, backDuration.value + 20)
+}
+
+function warmCovers() {
+  // Keep the current and next five posters ready, without decoding the entire feed.
+  for (const video of playbackCoverWindow(videos.value, currentIdx.value)) {
+    const url = mediaUrl(video.cover)
+    if (url) void prefetchCover(url, Date.now() + 60000)
+  }
+}
+
+function suspendPlayback() {
+  if (suspended) return
+  suspended = true
+  resumePlaying = !manuallyPaused
+  clearTimeout(backTimer)
+  backSettling = false
+  cancelBack()
+  observer?.disconnect()
+  containerRef.value?.querySelectorAll('video').forEach(video => {
+    const source = streams.get(video)
+    clearTimeout(source?.timeout)
+    source?.hls?.stopLoad()
+    video.pause()
+  })
+}
+function resumePlayback() {
+  if (!suspended || disposed || document.hidden || backClosing) return
+  suspended = false
+  warmCovers()
+  void nextTick(() => {
+    if (disposed || suspended) return
+    setupObserver()
+    const video = activeVideo()
+    const item = currentVideo.value
+    if (!video || !item) return
+    const source = streams.get(video)
+    if (!source || source.needsRefresh || video.error) {
+      void attachSource(video, item, video.currentTime)
+      return
+    }
+    source.hls?.startLoad()
+    if (video.readyState === HTMLMediaElement.HAVE_NOTHING) {
+      source.timeout = setTimeout(() => sourceFailed(video, source, '视频恢复超时，点击重试'), 15000)
+    }
+    if (resumePlaying) void playVideo(video, true)
+  })
+}
+function onVisibility() { if (document.hidden) suspendPlayback(); else resumePlayback() }
+function onPageShow(event: PageTransitionEvent) { if (event.persisted) resumePlayback() }
 
 function updatePlayback(event: Event, idx: number) {
   if (idx !== currentIdx.value) return
@@ -58,12 +177,14 @@ function setupObserver() {
       }
     }
   }, { root: containerRef.value, threshold: [0, 0.7, 1] })
-  setTimeout(() => {
+  void nextTick(() => {
+    if (disposed || suspended) return
     containerRef.value?.querySelectorAll('[data-idx]').forEach(el => observer?.observe(el))
-  }, 0)
+  })
 }
 
 async function playVideo(video: HTMLVideoElement, autoplay = false) {
+  if (document.hidden || suspended || (autoplay && manuallyPaused)) return
   if (video.readyState === HTMLMediaElement.HAVE_NOTHING) return
 
   try {
@@ -81,6 +202,7 @@ async function playVideo(video: HTMLVideoElement, autoplay = false) {
 
 function syncVideo(el: HTMLVideoElement, idx: number) {
   if (idx === currentIdx.value) {
+    if (document.hidden || suspended) return
     el.muted = false
     void playVideo(el, true)
   } else {
@@ -92,11 +214,14 @@ function syncVideo(el: HTMLVideoElement, idx: number) {
 interface VideoSource {
   hls?: Hls
   timeout?: ReturnType<typeof setTimeout>
+  needsRefresh?: boolean
+  resumeAt?: number
 }
 const streams = new WeakMap<HTMLVideoElement, VideoSource>()
 
 function sourceFailed(el: HTMLVideoElement, source: VideoSource, reason: string) {
   if (streams.get(el) !== source || el !== activeVideo()) return
+  if (document.hidden || suspended) { source.needsRefresh = true; return }
   loadError.value = reason
   loadState.value = 'failed'
   detachSource(el)
@@ -121,6 +246,10 @@ function mediaReady(event: Event, idx: number) {
   const source = streams.get(el)
   if (!source) return
   fitMediaWidth(el)
+  if (source.resumeAt && Number.isFinite(el.duration)) {
+    el.currentTime = Math.min(source.resumeAt, Math.max(0, el.duration - .1))
+    source.resumeAt = undefined
+  }
   clearTimeout(source.timeout)
   if (idx === currentIdx.value) loadState.value = 'ready'
   updatePlayback(event, idx)
@@ -159,9 +288,9 @@ function isHls(url: string) {
   return /\.m3u8(?:[?#]|$)/i.test(url)
 }
 
-async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url: string }) {
+async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url: string }, resumeAt = 0) {
   detachSource(el)
-  const source: VideoSource = {}
+  const source: VideoSource = { resumeAt }
   streams.set(el, source)
   if (el === activeVideo()) {
     loadState.value = 'loading'
@@ -178,6 +307,11 @@ async function attachSource(el: HTMLVideoElement, { id, url }: { id: number; url
     const { video } = await shortVideoApi.show(id)
     if (streams.get(el) !== source) return
     url = video.url
+    // Use Safari's native pipeline instead of loading a JS HLS decoder on iPhone.
+    if (el.canPlayType('application/vnd.apple.mpegurl')) {
+      el.src = url
+      return
+    }
     const { default: Hls } = await import('hls.js')
     if (streams.get(el) !== source) return
     if (!Hls.isSupported()) {
@@ -210,6 +344,8 @@ const vVideoSource: ObjectDirective<HTMLVideoElement, { id: number; url: string 
 }
 
 watch(currentIdx, () => {
+  manuallyPaused = false
+  warmCovers()
   loadState.value = 'loading'
   playback.value = { paused: true, current: 0, duration: 0, waiting: false }
   const el = activeVideo()
@@ -227,16 +363,20 @@ function activeVideo() {
 }
 
 function togglePlay() {
+  if (performance.now() < ignoreClickUntil || backClosing) return
   const video = activeVideo()
   const item = currentVideo.value
   if (!video || !item) return
   if (loadState.value === 'failed') {
+    manuallyPaused = false
     void attachSource(video, item)
     return
   }
   if (video.paused) {
+    manuallyPaused = false
     void playVideo(video)
   } else {
+    manuallyPaused = true
     video.pause()
   }
 }
@@ -307,6 +447,10 @@ const previousChrome = pageChrome.map(element => ({
   scheme: element.style.colorScheme,
 }))
 onMounted(async () => {
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('pagehide', suspendPlayback)
+  window.addEventListener('pageshow', onPageShow)
+  warmCovers()
   playbackChrome.forEach(setting => {
     setting.previous = setting.element?.getAttribute('content') ?? null
     setting.element?.setAttribute('content', setting.content)
@@ -322,6 +466,11 @@ onMounted(async () => {
   containerRef.value?.parentElement?.querySelector<HTMLButtonElement>('.player-close')?.focus()
 })
 onUnmounted(() => {
+  disposed = true
+  clearTimeout(backTimer)
+  document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('pagehide', suspendPlayback)
+  window.removeEventListener('pageshow', onPageShow)
   observer?.disconnect()
   mediaSizeObserver.disconnect()
   pageChrome.forEach((element, index) => {
@@ -336,8 +485,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="short-player relative flex h-full flex-col bg-black text-white">
-    <button class="player-close" aria-label="返回视频列表" @click="$emit('close')">‹</button>
+  <div class="short-player relative flex h-full flex-col bg-black text-white"
+    :style="{ transform: `translate3d(${backOffset}px,0,0)`, transition: backDragging ? 'none' : `transform ${backDuration}ms cubic-bezier(.16,1,.3,1)` }"
+    @touchstart.passive="startBack" @touchmove="moveBack" @touchend.passive="endBack" @touchcancel.passive="cancelBack">
+    <button class="player-close" aria-label="返回视频列表" @click="closePlayer">‹</button>
 
     <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory">
       <section
@@ -348,7 +499,7 @@ onUnmounted(() => {
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="v.cover || (idx === initialIndex && initialCover)" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="short-playback-cover absolute left-0 top-1/2 h-full w-full -translate-y-1/2 object-fill bg-black" @load="coverReady($event, idx)" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="isNear(idx) && (v.cover || (idx === initialIndex && initialCover))" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="short-playback-cover absolute left-0 top-1/2 h-full w-full -translate-y-1/2 object-fill bg-black" @load="coverReady($event, idx)" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
@@ -427,7 +578,7 @@ onUnmounted(() => {
         </template>
 
         <!-- Action buttons -->
-        <div class="absolute right-3 bottom-32 flex flex-col gap-5 text-white pointer-events-auto">
+        <div v-if="isNear(idx)" class="absolute right-3 bottom-32 flex flex-col gap-5 text-white pointer-events-auto">
           <div class="flex flex-col items-center text-xs">
             <button
               :class="['w-10 h-10 rounded-full flex items-center justify-center text-lg', currentVideo?.id === v.id && currentState.liked ? 'bg-red-500' : 'bg-white/15']"
@@ -453,7 +604,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Video info -->
-        <div class="absolute left-4 bottom-24 right-20 text-white pointer-events-none">
+        <div v-if="isNear(idx)" class="absolute left-4 bottom-24 right-20 text-white pointer-events-none">
           <p class="font-semibold">@{{ v.user?.username }}</p>
           <p class="text-sm mt-1">{{ v.title }}</p>
           <p v-if="v.description" class="text-xs text-gray-300 mt-1 line-clamp-2">{{ v.description }}</p>
@@ -510,6 +661,7 @@ onUnmounted(() => {
   background: transparent;
   text-shadow: 0 1px 4px #0009;
 }
+.short-player { touch-action: pan-y; will-change: transform; }
 
 .short-playback-frame { object-fit: fill; object-position: center; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }

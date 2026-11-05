@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
 import { useRouter } from 'vue-router'
-import { portablePlaybackCover } from '@/utils/playback-cover'
 import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
@@ -283,29 +282,19 @@ function selectCategory(category: number | null) {
   selected.value = category
   void load()
 }
-let openingPlayback = false
-async function open(video: ShortVideo | Video, event: MouseEvent) {
+let listScrollTop = 0
+const listViewportHeight = ref(0)
+function closePlayer() {
+  playerIndex.value = null
+  void nextTick(() => {
+    if (scrollArea.value) scrollArea.value.scrollTop = listScrollTop
+  })
+}
+function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
-  if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-    openingPlayback = true
-    const entry = crypto.randomUUID()
-    const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(),
-      discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
-    }
-    const cover = await portablePlaybackCover(poster)
-    if (disposed) return
-    try {
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
-    } catch {
-      // A large cover must not prevent saving the video queue and return position.
-      try { sessionStorage.setItem('short-playback-feed', JSON.stringify(snapshot)) } catch { /* Direct loading remains available. */ }
-    }
-    window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
-    return
-  }
+  listScrollTop = scrollArea.value?.scrollTop ?? 0
+  listViewportHeight.value = scrollArea.value?.closest('.discovery-browse')?.clientHeight ?? 0
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
@@ -354,7 +343,7 @@ onMounted(() => {
     const items = Array.isArray(result) ? result : result.data ?? []
     categories.value = items
     if (props.kind !== 'short') return
-    for (let index = 0; index < items.length && !disposed; index += 2) {
+    for (let index = 0; index < items.length && !disposed && !document.hidden; index += 2) {
       await Promise.all(items.slice(index, index + 2).map(category => warmShortFeed(category.id)))
     }
   }).catch(() => {})
@@ -363,7 +352,7 @@ onMounted(() => {
 
 <template>
   <section class="discovery-page" :aria-label="kind === 'short' ? '短视频发现' : '长视频发现'">
-    <div class="discovery-browse" :inert="playerIndex !== null || undefined">
+    <div class="discovery-browse" :style="{ height: playerIndex !== null ? listViewportHeight + 'px' : undefined }" :inert="playerIndex !== null || undefined">
     <header class="discovery-header">
       <button class="feed-icon" aria-label="打开我的页面" @click="router.push('/me')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
       <nav class="feed-tabs" aria-label="视频频道">
@@ -397,8 +386,8 @@ onMounted(() => {
     </div>
     </div>
     <Teleport to="body">
-      <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="playerIndex = null">
-        <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="playerIndex = null" />
+      <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="closePlayer">
+        <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="closePlayer" />
       </div>
     </Teleport>
   </section>
