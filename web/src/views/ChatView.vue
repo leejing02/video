@@ -42,6 +42,12 @@ const swipeDuration = ref(220)
 let swipeTimer: ReturnType<typeof setTimeout> | undefined
 let backSwipe: { id: number; x: number; y: number; lastX: number; lastTime: number; velocity: number } | undefined
 
+function dismissChatKeyboard() {
+  const active = document.activeElement
+  if ((active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)
+      && active.closest('.chat-composer')) active.blur()
+}
+
 function cancelBackSwipe() {
   backSwipe = undefined
   swipeDragging.value = false
@@ -271,9 +277,9 @@ onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disp
     </aside>
     <section class="conversation-detail" @touchstart.passive="startBackSwipe" @touchmove="moveBackSwipe" @touchend.passive="endBackSwipe" @touchcancel.passive="cancelBackSwipe">
       <template v-if="room">
-        <header class="conversation-header"><button class="chat-back round-button" aria-label="返回会话列表" @click="returnToConversations">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
+        <header class="conversation-header" @click="dismissChatKeyboard"><button class="chat-back round-button" aria-label="返回会话列表" @click="returnToConversations">‹</button><div class="header-avatar"><AvatarContent :src="room.cover" :name="room.name" /></div><div><h2>{{ room.name }}</h2><p>{{ room.kind === 'direct' ? '私聊' : '群组会话' }} · {{ connected ? '实时连接' : '正在重连' }}</p></div><span class="conversation-kind">{{ room.kind === 'direct' ? '私聊' : '群组' }}</span></header>
         <div v-if="error" class="chat-error" role="alert">{{ error }}<button @click="error = ''">关闭</button></div>
-        <div ref="scrollEl" class="message-timeline">
+        <div ref="scrollEl" class="message-timeline" @click="dismissChatKeyboard">
           <div class="timeline-label">{{ room.kind === 'direct' ? '你们的对话，从这里开始' : '一起聊聊新鲜事' }}</div>
           <button v-if="messages.length && !exhausted[room.id]" class="load-history" :disabled="olderLoading" @click="older">{{ olderLoading ? '正在加载…' : '加载更早消息' }}</button>
           <p v-if="loading" class="chat-loading">加载消息中…</p>
