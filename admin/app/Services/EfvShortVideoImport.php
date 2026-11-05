@@ -68,7 +68,7 @@ class EfvShortVideoImport
             $expectedTotal = null;
             $expectedPages = null;
             $scanned = 0;
-            $stats = ['source_total' => null, 'scanned' => 0, 'skipped' => [], 'updated' => 0, 'archived' => 0, 'eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
+            $stats = ['source_total' => null, 'scanned' => 0, 'unique' => 0, 'duplicates' => [], 'archive_skipped' => false, 'skipped' => [], 'updated' => 0, 'archived' => 0, 'eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
             for ($page = 1; ; $page++) {
                 try {
                     $response = $cms
@@ -103,14 +103,22 @@ class EfvShortVideoImport
                     }
                     $expectedTotal = $total;
                     $expectedPages = $pageCount;
+                    $uniqueMovies = [];
                     foreach ($movies as $entry) {
                         $sourceId = $cms ? ($entry['vod_id'] ?? null) : ($entry['_id'] ?? null);
-                        if (!is_string($sourceId) || !preg_match('/^[a-f0-9]{24}$/D', $sourceId) || isset($seen[$sourceId])) {
-                            throw new DomainException('采集记录 ID 异常或分页重复，已停止同步下架。');
+                        if (!is_string($sourceId) || !preg_match('/^[a-f0-9]{24}$/D', $sourceId)) {
+                            throw new DomainException("采集第 {$page} 页视频 ID 格式异常，已停止同步下架。");
+                        }
+                        if (isset($seen[$sourceId])) {
+                            $stats['duplicates'][] = ['page' => $page, 'id' => $sourceId];
+                            continue;
                         }
                         $seen[$sourceId] = true;
                         $scanned++;
+                        $uniqueMovies[] = $entry;
                     }
+                    $movies = $uniqueMovies;
+                    $stats['unique'] = $scanned;
                 }
 
                 $new = [];
@@ -189,7 +197,8 @@ class EfvShortVideoImport
                 if ($page >= $pageCount) {
                     if ($reconcile) {
                         if ($scanned !== $expectedTotal) {
-                            throw new DomainException('采集数量与接口总数不一致，已停止同步下架，请重新执行。');
+                            $stats['archive_skipped'] = true;
+                            return $stats;
                         }
                         $missing = [];
                         foreach ($imported as $sourceId => $videoIds) {

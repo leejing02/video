@@ -48,9 +48,10 @@ $sync = new class extends EfvShortVideoSync {
     }
 };
 $total = 1;
-Http::fake(function ($request) use ($id, &$total) {
+$pages = 1;
+Http::fake(function ($request) use ($id, &$total, &$pages) {
     if ($request['ac'] === 'list') return Http::response(['code' => 1, 'class' => [['type_name' => '国产短视频', 'type_id' => 9]]]);
-    return Http::response(['code' => 1, 'page' => 1, 'pagecount' => 1, 'total' => $total, 'list' => [[
+    return Http::response(['code' => 1, 'page' => (int) $request['pg'], 'pagecount' => $pages, 'total' => $total, 'list' => [[
         'type_name' => '国产短视频', 'vod_id' => $id, 'vod_name' => 'new title', 'vod_content' => '<p>new summary</p>',
         'vod_play_url' => 'HD$https://efv.example.test/videos/new/index.m3u8',
     ]]]);
@@ -60,11 +61,14 @@ $assert = function ($condition, $message) { if (!$condition) throw new RuntimeEx
 $stats = $run(true);
 $assert($stats['archived'] === 1 && Video::find(2)->status === 'published', 'Preview mutated records.');
 $total = 2;
-try {
-    $run();
-    throw new RuntimeException('Incomplete snapshot was accepted.');
-} catch (DomainException) {}
+$stats = $run();
+$assert($stats['archive_skipped'], 'Incomplete snapshot was not marked unsafe.');
 $assert(Video::find(2)->status === 'published', 'Incomplete snapshot archived records.');
+$pages = 2;
+$stats = $run();
+$assert($stats['unique'] === 1 && count($stats['duplicates']) === 1 && $stats['archive_skipped'], 'Duplicate pages did not complete safely.');
+$assert(Video::find(2)->status === 'published', 'Duplicate pages archived records.');
+$pages = 1;
 $total = 1;
 $stats = $run();
 $assert(Video::find(1)->title === 'new title' && Video::find(1)->description === 'new summary', 'Existing metadata was not updated.');

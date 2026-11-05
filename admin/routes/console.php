@@ -57,6 +57,15 @@ Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入}
     }
 
     $this->line("接口总数 ".($stats['source_total'] ?? '未返回')."，实际读取 {$stats['scanned']}，过滤 ".count($stats['skipped'])."。");
+    if ($this->option('sync')) {
+        $this->line("去重后 {$stats['unique']}，重复 ".count($stats['duplicates'])."。");
+        foreach ($stats['duplicates'] as $item) {
+            $this->warn("第 {$item['page']} 页重复视频 ID：{$item['id']}");
+        }
+        if ($stats['archive_skipped']) {
+            $this->warn('本轮已处理读到的视频，但去重数量与接口总数不一致，未执行下架。请核查 EFV 采集接口的分页数据。');
+        }
+    }
     foreach ($stats['skipped'] as $item) {
         $this->warn(json_encode($item, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
     }
