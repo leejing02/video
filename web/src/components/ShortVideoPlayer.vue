@@ -280,10 +280,10 @@ const previousChrome = pageChrome.map(element => ({
 }))
 onMounted(async () => {
   previousThemeColor = themeColor?.getAttribute('content') ?? null
-  themeColor?.setAttribute('content', '#000000')
+  themeColor?.setAttribute('content', '#ffffff')
   pageChrome.forEach(element => {
-    element.style.backgroundColor = '#000000'
-    element.style.colorScheme = 'dark'
+    element.style.backgroundColor = '#ffffff'
+    element.style.colorScheme = 'light'
   })
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
@@ -466,8 +466,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-:global(html:has(.short-player)),
-:global(body:has(.short-player)) { background: #000; }
 .player-top-bar {
   height: calc(env(safe-area-inset-top, 0px) + 56px);
   flex-shrink: 0;
