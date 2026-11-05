@@ -286,16 +286,25 @@ async function sendComment() {
 const currentVideo = computed(() => videos.value[currentIdx.value] ?? null)
 const currentState = computed(() => currentVideo.value ? (states.value[currentVideo.value.id] ?? { liked: false, favorited: false }) : { liked: false, favorited: false })
 
-const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-let previousThemeColor: string | null = null
+const playbackChrome = [
+  { name: 'theme-color', content: '#000000' },
+  { name: 'color-scheme', content: 'dark' },
+  { name: 'apple-mobile-web-app-status-bar-style', content: 'black' },
+].map(({ name, content }) => ({
+  element: document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`),
+  content,
+  previous: null as string | null,
+}))
 const pageChrome = [document.documentElement, document.body]
 const previousChrome = pageChrome.map(element => ({
   background: element.style.backgroundColor,
   scheme: element.style.colorScheme,
 }))
 onMounted(async () => {
-  previousThemeColor = themeColor?.getAttribute('content') ?? null
-  themeColor?.setAttribute('content', '#000000')
+  playbackChrome.forEach(setting => {
+    setting.previous = setting.element?.getAttribute('content') ?? null
+    setting.element?.setAttribute('content', setting.content)
+  })
   pageChrome.forEach(element => {
     element.style.backgroundColor = '#000000'
     element.style.colorScheme = 'dark'
@@ -313,7 +322,10 @@ onUnmounted(() => {
     element.style.backgroundColor = previousChrome[index].background
     element.style.colorScheme = previousChrome[index].scheme
   })
-  if (previousThemeColor !== null) themeColor?.setAttribute('content', previousThemeColor)
+  playbackChrome.forEach(setting => {
+    if (setting.previous !== null) setting.element?.setAttribute('content', setting.previous)
+    else setting.element?.removeAttribute('content')
+  })
 })
 </script>
 
