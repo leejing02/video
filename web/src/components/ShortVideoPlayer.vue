@@ -295,10 +295,10 @@ const previousChrome = pageChrome.map(element => ({
 }))
 onMounted(async () => {
   previousThemeColor = themeColor?.getAttribute('content') ?? null
-  themeColor?.setAttribute('content', '#ffffff')
+  themeColor?.setAttribute('content', '#000000')
   pageChrome.forEach(element => {
-    element.style.backgroundColor = '#ffffff'
-    element.style.colorScheme = 'light'
+    element.style.backgroundColor = '#000000'
+    element.style.colorScheme = 'dark'
   })
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
