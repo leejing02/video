@@ -273,9 +273,18 @@ const currentState = computed(() => currentVideo.value ? (states.value[currentVi
 
 const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
 let previousThemeColor: string | null = null
+const pageChrome = [document.documentElement, document.body]
+const previousChrome = pageChrome.map(element => ({
+  background: element.style.backgroundColor,
+  scheme: element.style.colorScheme,
+}))
 onMounted(async () => {
   previousThemeColor = themeColor?.getAttribute('content') ?? null
   themeColor?.setAttribute('content', '#000000')
+  pageChrome.forEach(element => {
+    element.style.backgroundColor = '#000000'
+    element.style.colorScheme = 'dark'
+  })
   await nextTick()
   containerRef.value?.scrollTo({ top: props.initialIndex * containerRef.value.clientHeight })
   setupObserver()
@@ -283,15 +292,20 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   observer?.disconnect()
+  pageChrome.forEach((element, index) => {
+    element.style.backgroundColor = previousChrome[index].background
+    element.style.colorScheme = previousChrome[index].scheme
+  })
   if (previousThemeColor !== null) themeColor?.setAttribute('content', previousThemeColor)
 })
 </script>
 
 <template>
-  <div class="short-player relative h-full bg-black text-white">
+  <div class="short-player relative flex h-full flex-col bg-black text-white">
+    <div class="player-top-bar" aria-hidden="true"></div>
     <button class="player-close" aria-label="返回视频列表" @click="$emit('close')">‹</button>
 
-    <div ref="containerRef" class="h-full overflow-y-scroll snap-y snap-mandatory">
+    <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory">
       <section
         v-for="(v, idx) in videos"
         :key="v.id"
@@ -454,6 +468,12 @@ onUnmounted(() => {
 <style scoped>
 :global(html:has(.short-player)),
 :global(body:has(.short-player)) { background: #000; }
+.player-top-bar {
+  height: calc(env(safe-area-inset-top, 0px) + 56px);
+  flex-shrink: 0;
+  background: #000;
+  pointer-events: none;
+}
 .short-player .player-close {
   background: transparent;
   text-shadow: 0 1px 4px #0009;
