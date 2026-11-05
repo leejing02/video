@@ -293,7 +293,7 @@ onUnmounted(() => observer?.disconnect())
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-contain bg-black" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="v.cover" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="absolute inset-0 h-full w-full object-fill bg-black" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
@@ -445,6 +445,6 @@ onUnmounted(() => observer?.disconnect())
 </template>
 
 <style scoped>
-.short-playback-frame { object-fit: contain; }
+.short-playback-frame { object-fit: fill; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
 </style>
