@@ -74,4 +74,8 @@ $assert($run()['archived'] === 0, 'Repeated synchronization was not idempotent.'
 Video::find(1)->update(['status' => 'archived']);
 $run();
 $assert(Video::find(1)->status === 'published', 'Reappearing record was not restored.');
+Video::find(1)->delete();
+$stats = $run(true);
+$assert($stats['eligible'] === 1 && $stats['existing'] === 0, 'Stale import link prevented reimport.');
+$assert($stats['source_total'] === 1 && $stats['scanned'] === 1, 'Source totals were not reported.');
 echo "EFV reconciliation checks passed.\n";

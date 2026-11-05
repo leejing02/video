@@ -30,7 +30,13 @@ class EfvShortVideoImport
         }
 
         try {
-            $known = array_fill_keys(iterator_to_array($sync->linkedMovies()), true);
+            $localIds = array_fill_keys(Video::query()->where('type', Video::TYPE_SHORT)->pluck('id')->all(), true);
+            $known = [];
+            foreach ($sync->linkedMovies() as $videoId => $sourceId) {
+                if (isset($localIds[$videoId])) {
+                    $known[$sourceId] = true;
+                }
+            }
             $http = Http::acceptJson()->withoutRedirecting()->connectTimeout(5)->timeout(20);
             $categoryId = null;
             $cmsAuth = array_filter(['apiKey' => config('services.efv.cms_api_key')]);
@@ -62,7 +68,7 @@ class EfvShortVideoImport
             $expectedTotal = null;
             $expectedPages = null;
             $scanned = 0;
-            $stats = ['updated' => 0, 'archived' => 0, 'eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
+            $stats = ['source_total' => null, 'scanned' => 0, 'skipped' => [], 'updated' => 0, 'archived' => 0, 'eligible' => 0, 'existing' => 0, 'published' => 0, 'pending' => 0, 'missing_cover' => 0];
             for ($page = 1; ; $page++) {
                 try {
                     $response = $cms
@@ -85,6 +91,8 @@ class EfvShortVideoImport
                     throw new DomainException("EFV 第 {$page} 页返回异常，请检查 API 设置。");
                 }
 
+                $stats['source_total'] = $response->json('total');
+                $stats['scanned'] += count($movies);
                 if ($reconcile) {
                     $total = filter_var($response->json('total'), FILTER_VALIDATE_INT);
                     if ($total === false || $total < 0
@@ -108,8 +116,14 @@ class EfvShortVideoImport
                 $new = [];
                 foreach ($movies as $movie) {
                     if ($cms) {
+                        $source = $movie;
                         $movie = $this->fromCms($movie, $endpoint);
                         if (!$movie) {
+                            $stats['skipped'][] = [
+                                'id' => $source['vod_id'] ?? '',
+                                'title' => $source['vod_name'] ?? '',
+                                'reason' => '分类不符或被标记为剧集（vod_total / vod_serial 非零）',
+                            ];
                             continue;
                         }
                     }
@@ -117,6 +131,10 @@ class EfvShortVideoImport
                     if (!is_string($id) || !preg_match('/^[a-f0-9]{24}$/D', $id)
                         || ($movie['category'] ?? null) !== self::CATEGORY
                         || !in_array($movie['status'] ?? null, ['finished', '转码完成'], true)) {
+                        $stats['skipped'][] = [
+                            'id' => $id ?? '', 'title' => $movie['originalname'] ?? '',
+                            'reason' => '视频 ID、分类或转码状态不符合导入要求',
+                        ];
                         continue;
                     }
                     if (isset($known[$id])) {

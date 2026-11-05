@@ -56,6 +56,10 @@ Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入}
         return 1;
     }
 
+    $this->line("接口总数 ".($stats['source_total'] ?? '未返回')."，实际读取 {$stats['scanned']}，过滤 ".count($stats['skipped'])."。");
+    foreach ($stats['skipped'] as $item) {
+        $this->warn(json_encode($item, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
+    }
     $this->info("新增候选 {$stats['eligible']}，已有 {$stats['existing']}，已发布 {$stats['published']}，待同步 {$stats['pending']}，待补封面 {$stats['missing_cover']}，更新 {$stats['updated']}，下架 {$stats['archived']}。");
 
     return 0;
