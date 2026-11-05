@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
 import { useRouter } from 'vue-router'
+import { portablePlaybackCover } from '@/utils/playback-cover'
 import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
@@ -282,20 +283,29 @@ function selectCategory(category: number | null) {
   selected.value = category
   void load()
 }
-function open(video: ShortVideo | Video, event: MouseEvent) {
+let openingPlayback = false
+async function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
+  if (openingPlayback) return
+  const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    openingPlayback = true
     const entry = crypto.randomUUID()
+    const snapshot = {
+      id: video.id, entry, items: visible.value, created: Date.now(),
+      discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
+    }
+    const cover = await portablePlaybackCover(poster)
+    if (disposed) return
     try {
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({
-        id: video.id, entry, items: visible.value, created: Date.now(),
-        discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
-      }))
-    } catch { /* Playback can load its selected video when storage is unavailable. */ }
+      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
+    } catch {
+      // A large cover must not prevent saving the video queue and return position.
+      try { sessionStorage.setItem('short-playback-feed', JSON.stringify(snapshot)) } catch { /* Direct loading remains available. */ }
+    }
     window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
     return
   }
-  const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)

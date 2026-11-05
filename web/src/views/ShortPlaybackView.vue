@@ -8,6 +8,7 @@ import type { ShortVideo } from '@/types/models'
 const route = useRoute()
 const items = ref<ShortVideo[]>([])
 const initialIndex = ref(0)
+const initialCover = ref('')
 const error = ref('')
 const id = Number(route.query.id)
 
@@ -35,6 +36,7 @@ async function load() {
       const index = saved.items.findIndex((video: ShortVideo) => video.id === id)
       if (index >= 0) {
         initialIndex.value = index
+        initialCover.value = typeof saved.cover === 'string' && !saved.cover.startsWith('blob:') ? saved.cover : ''
         items.value = saved.items
         return
       }
@@ -60,7 +62,7 @@ onUnmounted(() => window.removeEventListener('pageshow', onPageShow))
 
 <template>
   <div class="h-full bg-black text-white">
-    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" @close="close" />
+    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" :initial-cover="initialCover" @close="close" />
     <div v-else class="flex h-full flex-col items-center justify-center gap-4" role="status">
       <span>{{ error || '正在加载视频…' }}</span>
       <button v-if="error" @click="load">重试</button>
