@@ -103,12 +103,15 @@ function sourceFailed(el: HTMLVideoElement, source: VideoSource, reason: string)
   el.pause()
 }
 
+function updateVideoFit(video: HTMLVideoElement) {
+  video.toggleAttribute('data-portrait', video.videoWidth > 0 && video.videoHeight > video.videoWidth)
+}
+
 function mediaReady(event: Event, idx: number) {
   const el = event.currentTarget as HTMLVideoElement
   const source = streams.get(el)
   if (!source) return
-  el.classList.toggle('object-contain', el.videoWidth > el.videoHeight)
-  el.classList.toggle('object-cover', el.videoWidth <= el.videoHeight)
+  updateVideoFit(el)
   clearTimeout(source.timeout)
   if (idx === currentIdx.value) loadState.value = 'ready'
   updatePlayback(event, idx)
@@ -118,6 +121,7 @@ function mediaReady(event: Event, idx: number) {
 function revealVideo(event: Event) {
   const video = event.currentTarget as HTMLVideoElement
   if (streams.has(video) && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    updateVideoFit(video)
     video.dataset.frameReady = 'true'
   }
 }
@@ -132,6 +136,7 @@ function detachSource(el: HTMLVideoElement) {
   const source = streams.get(el)
   streams.delete(el)
   delete el.dataset.frameReady
+  delete el.dataset.portrait
   clearTimeout(source?.timeout)
   source?.hls?.destroy()
 }
@@ -300,6 +305,7 @@ onUnmounted(() => observer?.disconnect())
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
           @loadedmetadata="mediaReady($event, idx)"
+          @resize="updateVideoFit($event.currentTarget as HTMLVideoElement)"
           @durationchange="updatePlayback($event, idx)"
           @timeupdate="updatePlayback($event, idx)"
           @play="updatePlayback($event, idx)"
@@ -312,7 +318,7 @@ onUnmounted(() => observer?.disconnect())
           loop
           playsinline
           preload="metadata"
-          class="short-playback-frame absolute inset-0 h-full w-full object-cover bg-gradient-to-br from-slate-700 to-slate-900"
+          class="short-playback-frame absolute inset-0 h-full w-full bg-gradient-to-br from-slate-700 to-slate-900"
         />
 
         <template v-if="idx === currentIdx">
@@ -447,5 +453,7 @@ onUnmounted(() => observer?.disconnect())
 </template>
 
 <style scoped>
+.short-playback-frame { object-fit: contain; }
+.short-playback-frame[data-portrait] { object-fit: cover; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
 </style>
