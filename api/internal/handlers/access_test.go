@@ -105,6 +105,10 @@ func TestPublicVideoVisibility(t *testing.T) {
 				if status == "published" {
 					want = http.StatusOK
 					mock.ExpectExec("UPDATE videos SET").WithArgs(int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+					if path == "/short-videos/7" {
+						mock.ExpectQuery("SELECT v.likes").WithArgs(int64(0), int64(0), int64(7)).
+							WillReturnRows(sqlmock.NewRows([]string{"likes", "favorites", "shares", "comments_count", "liked", "favorited"}).AddRow(0, 0, 0, 0, false, false))
+					}
 				}
 				video := &VideoHandler{Videos: repos.NewVideoRepo(db)}
 				short := &ShortVideoHandler{Repo: repos.NewShortVideoRepo(db)}

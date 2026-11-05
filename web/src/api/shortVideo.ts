@@ -25,6 +25,8 @@ export const shortVideoApi = {
 
   show: (id: number) => get<ShortVideoDetail>(`/short-videos/${id}`),
 
+  interactions: (id: number) => get<{likes:number;favorites:number;comments_count:number;shares:number;liked:boolean;favorited:boolean}>(`/short-videos/${id}/interactions`),
+
   like: (id: number) =>
     post<{ liked: boolean; count: number }>(`/short-videos/${id}/like`),
 

@@ -142,7 +142,7 @@ function resumePlayback() {
     if (resumePlaying) void playVideo(video, true)
   })
 }
-function onVisibility() { if (document.hidden) suspendPlayback(); else resumePlayback() }
+function onVisibility() { if (document.hidden) suspendPlayback(); else {resumePlayback();void refreshInteractions()} }
 function onPageShow(event: PageTransitionEvent) { if (event.persisted) resumePlayback() }
 
 function updatePlayback(event: Event, idx: number) {
@@ -390,25 +390,76 @@ function seek(event: Event) {
   playback.value.current = video.currentTime
 }
 
+let interactionVersion = 0
+let interactionTimer: ReturnType<typeof setInterval> | undefined
+const interactionBusy = ref(false)
+
+async function refreshInteractions() {
+  const item = videos.value[currentIdx.value]
+  if (!item || document.hidden || interactionBusy.value) return
+  const version = ++interactionVersion
+  const user = auth.user?.id
+  try {
+    const value = await shortVideoApi.interactions(item.id)
+    if (disposed || version !== interactionVersion || user !== auth.user?.id ||
+        videos.value[currentIdx.value]?.id !== item.id) return
+    states.value[item.id] = { liked: value.liked, favorited: value.favorited }
+    Object.assign(item, {
+      likes: value.likes, favorites: value.favorites,
+      comments_count: value.comments_count, shares: value.shares,
+    })
+  } catch {
+    // Preserve known state on transient connection errors.
+  }
+}
+watch(() => auth.user?.id, () => {
+  states.value = {}
+  interactionVersion++
+  void refreshInteractions()
+})
+watch(currentIdx, () => { void refreshInteractions() }, { immediate: true })
+
 async function like(id: number) {
   if (!auth.isLoggedIn) return showToast('请先登录')
-  const res = await shortVideoApi.like(id)
-  states.value[id] = { ...states.value[id], liked: res.liked }
-  const v = videos.value.find(v => v.id === id)
-  if (v) v.likes = res.count
+  if (interactionBusy.value) return
+  interactionBusy.value = true
+  interactionVersion++
+  const user = auth.user?.id
+  try {
+    const res = await shortVideoApi.like(id)
+    if (disposed || user !== auth.user?.id) return
+    states.value[id] = { ...states.value[id], liked: res.liked }
+    const item = videos.value.find(v => v.id === id)
+    if (item) item.likes = res.count
+  } catch {
+    showToast('点赞失败，请重试')
+  } finally {
+    interactionBusy.value = false
+    void refreshInteractions()
+  }
 }
-
 async function favorite(id: number) {
   if (!auth.isLoggedIn) return showToast('请先登录')
-  const res = await shortVideoApi.favorite(id)
-  states.value[id] = { ...states.value[id], favorited: res.favorited }
-  const v = videos.value.find(v => v.id === id)
-  if (v) v.favorites = res.count
-  showToast(res.favorited ? '已收藏' : '已取消收藏')
+  if (interactionBusy.value) return
+  interactionBusy.value = true
+  interactionVersion++
+  const user = auth.user?.id
+  try {
+    const res = await shortVideoApi.favorite(id)
+    if (disposed || user !== auth.user?.id) return
+    states.value[id] = { ...states.value[id], favorited: res.favorited }
+    const item = videos.value.find(v => v.id === id)
+    if (item) item.favorites = res.count
+  } catch {
+    showToast('收藏失败，请重试')
+  } finally {
+    interactionBusy.value = false
+    void refreshInteractions()
+  }
 }
 
 function share(_id: number) { panel.value='share'; preview.value='' }
-function openComments(_id: number) { showComments.value=true }
+function openComments(_id: number) { showComments.value=true;void refreshInteractions() }
 async function copyLink() {
  if (!currentVideo.value) return
  try {await navigator.clipboard.writeText(location.origin+'/player.html?id='+currentVideo.value.id);showToast('链接已复制')} catch {showToast('复制失败，请使用系统分享')}
@@ -436,6 +487,7 @@ const previousChrome = pageChrome.map(element => ({
   scheme: element.style.colorScheme,
 }))
 onMounted(async () => {
+  interactionTimer=setInterval(()=>{void refreshInteractions()},15000)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pagehide', suspendPlayback)
   window.addEventListener('pageshow', onPageShow)
@@ -456,6 +508,8 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   disposed = true
+  clearInterval(interactionTimer)
+  interactionVersion++
   clearTimeout(backTimer)
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('pagehide', suspendPlayback)
@@ -587,7 +641,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="showComments && currentVideo" class="player-sheet-mask" @click.self="showComments=false" @touchmove.stop>
-      <PlayerComments :key="currentVideo.id" :video-id="currentVideo.id" :count="currentVideo.comments_count" @close="showComments=false" @posted="currentVideo.comments_count++"/>
+      <PlayerComments :key="currentVideo.id" :video-id="currentVideo.id" :count="currentVideo.comments_count" @close="showComments=false" @posted="refreshInteractions"/>
     </div>
     <div v-if="panel && currentVideo" class="player-sheet-mask" @click.self="panel=null" @touchmove.stop>
       <section class="player-sheet" role="dialog" aria-modal="true" :aria-label="panel==='share'?'分享视频':'作者主页'" @click.stop>

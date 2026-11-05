@@ -59,19 +59,40 @@ func (h *ShortVideoHandler) Show(c *gin.Context) {
 	h.applyMediaDomain(v, readEFVM3U8Origin(efvMediaFile), true)
 	_ = h.Repo.IncrementViews(id)
 
-	liked := false
-	favorited := false
-	uid := middleware.CurrentUserID(c)
-	if uid > 0 {
-		liked, _ = h.Repo.IsLiked(uid, id)
-		favorited, _ = h.Repo.IsFavorited(uid, id)
+	summary, err := h.Repo.Interactions(id, middleware.CurrentUserID(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "interaction lookup failed"})
+		return
 	}
+	if summary == nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	v.Likes = summary.Likes
+	v.Favorites = summary.Favorites
+	v.CommentsCount = summary.Comments
+	v.Shares = summary.Shares
 
 	c.JSON(http.StatusOK, gin.H{
 		"video":     v,
-		"liked":     liked,
-		"favorited": favorited,
+		"liked":     summary.Liked,
+		"favorited": summary.Favorited,
 	})
+}
+
+func (h *ShortVideoHandler) Interactions(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	value, err := h.Repo.Interactions(id, middleware.CurrentUserID(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "interaction lookup failed"})
+		return
+	}
+	if value == nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(200, value)
 }
 
 func (h *ShortVideoHandler) Like(c *gin.Context) {
@@ -117,6 +138,7 @@ func (h *ShortVideoHandler) Share(c *gin.Context) {
 }
 
 func (h *ShortVideoHandler) ListComments(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	vid, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	limit := atoi(c.DefaultQuery("per_page", "20"))
 	offset := (atoi(c.DefaultQuery("page", "1")) - 1) * limit

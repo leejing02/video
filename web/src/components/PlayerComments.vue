@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref,onMounted } from 'vue'
+import { ref,onMounted,onUnmounted } from 'vue'
 import PlayerComment from './PlayerComment.vue'
 import { shortVideoApi } from '@/api/shortVideo'
 import type { ShortVideoComment } from '@/types/models'
@@ -7,9 +7,20 @@ const props=defineProps<{videoId:number;count:number}>();const emit=defineEmits<
 const comments=ref<ShortVideoComment[]>([]),reply=ref<ShortVideoComment|null>(null),text=ref(''),busy=ref(false),loading=ref(false),error=ref(''),more=ref(true)
 const composing=ref(false)
 let page=0
-async function load(){if(loading.value)return;loading.value=true;error.value='';try{const res=await shortVideoApi.comments(props.videoId,{page:page+1,per_page:20});comments.value.push(...res.data);page++;more.value=res.data.length===20}catch{error.value='评论加载失败，请重试'}finally{loading.value=false}}
-async function send(){if(busy.value||composing.value||!text.value.trim())return;busy.value=true;error.value='';try{await shortVideoApi.createComment(props.videoId,{content:text.value.trim(),parent_id:reply.value?.id});emit('posted');text.value='';reply.value=null;page=0;comments.value=[];await load()}catch{error.value='发送失败，请确认已登录后重试'}finally{busy.value=false}}
-onMounted(load)
+let revision=0
+async function load(){if(loading.value)return;loading.value=true;revision++;error.value='';try{const res=await shortVideoApi.comments(props.videoId,{page:page+1,per_page:20});comments.value.push(...res.data);page++;more.value=res.data.length===20}catch{error.value='评论加载失败，请重试'}finally{loading.value=false}}
+async function send(){if(busy.value||composing.value||!text.value.trim())return;busy.value=true;revision++;error.value='';try{await shortVideoApi.createComment(props.videoId,{content:text.value.trim(),parent_id:reply.value?.id});emit('posted');text.value='';reply.value=null;page=0;comments.value=[];await load()}catch{error.value='发送失败，请确认已登录后重试'}finally{busy.value=false}}
+let timer: ReturnType<typeof setInterval> | undefined
+let disposed=false
+async function syncComments(){
+ if(document.hidden||loading.value||busy.value)return
+ const version=revision
+ try{const res=await shortVideoApi.comments(props.videoId,{page:1,per_page:20});if(disposed||version!==revision)return
+ const ids=new Set(res.data.map(item=>item.id));comments.value=[...res.data,...comments.value.filter(item=>!ids.has(item.id))]
+ }catch{ /* Keep the visible thread on temporary network failures. */ }
+}
+onMounted(()=>{void load();timer=setInterval(syncComments,15000)})
+onUnmounted(()=>{disposed=true;clearInterval(timer)})
 </script>
 <template><div class="comments-panel" role="dialog" aria-modal="true" aria-label="视频评论"><header><strong>{{count}} 条评论</strong><button aria-label="关闭评论" @click="$emit('close')">×</button></header><div class="comment-scroll"><PlayerComment v-for="comment in comments" :key="comment.id" :comment="comment" :video-id="videoId" @reply="reply=$event"/><p v-if="!comments.length&&!loading">暂无评论，来说点什么吧</p><button v-if="more" @click="load">{{loading?'加载中…':'加载更多评论'}}</button><p v-if="error" role="alert">{{error}}</p></div><form @submit.prevent="send"><div v-if="reply" class="reply-target">回复 {{reply.user?.name || reply.user?.username}}<button type="button" @click="reply=null">×</button></div><div class="comment-compose"><input v-model="text" @compositionstart="composing=true" @compositionend="composing=false" maxlength="2000" :placeholder="reply?'回复这条评论…':'发条有爱评论～'" aria-label="评论内容"/><button :disabled="busy||!text.trim()">{{busy?'发送中':'发送'}}</button></div></form></div></template>
 <style scoped>

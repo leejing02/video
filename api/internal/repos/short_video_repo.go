@@ -311,3 +311,26 @@ func (r *ShortVideoRepo) listCategoriesDB() ([]models.ShortCategory, error) {
 		ORDER BY sort ASC, id ASC`)
 	return cats, err
 }
+
+// Interactions are live, per-viewer data and must never use the shared metadata cache.
+type VideoInteractions struct {
+	Likes     int64 `db:"likes" json:"likes"`
+	Favorites int64 `db:"favorites" json:"favorites"`
+	Comments  int64 `db:"comments_count" json:"comments_count"`
+	Shares    int64 `db:"shares" json:"shares"`
+	Liked     bool  `db:"liked" json:"liked"`
+	Favorited bool  `db:"favorited" json:"favorited"`
+}
+
+func (r *ShortVideoRepo) Interactions(id, userID int64) (*VideoInteractions, error) {
+	var out VideoInteractions
+	err := r.DB.Get(&out, `SELECT v.likes, v.favorites, v.shares,
+ (SELECT COUNT(*) FROM short_video_comments c WHERE c.video_id=v.id) AS comments_count,
+ EXISTS(SELECT 1 FROM short_video_likes l WHERE l.video_id=v.id AND l.user_id=? AND l.kind='like') AS liked,
+ EXISTS(SELECT 1 FROM short_video_likes l WHERE l.video_id=v.id AND l.user_id=? AND l.kind='favorite') AS favorited
+ FROM videos v WHERE v.id=? AND v.type='short' AND v.status='published'`, userID, userID, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &out, err
+}

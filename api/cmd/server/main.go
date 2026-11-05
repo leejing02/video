@@ -117,7 +117,8 @@ func main() {
 	// 短视频公开接口
 	api.GET("/short-categories", shortVidH.ListCategories)
 	api.GET("/short-videos", shortVidH.List)
-	api.GET("/short-videos/:id", shortVidH.Show)
+	api.GET("/short-videos/:id", middleware.AuthOptional(cfg.JWTSecret), shortVidH.Show)
+	api.GET("/short-videos/:id/interactions", middleware.AuthOptional(cfg.JWTSecret), shortVidH.Interactions)
 	api.GET("/short-videos/:id/comments", shortVidH.ListComments)
 	api.GET("/short-videos/:id/share", shortVidH.Share)
 
