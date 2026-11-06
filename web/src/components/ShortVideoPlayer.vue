@@ -15,7 +15,7 @@ import { playbackCoverWindow } from '@/utils/playback-window'
 import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
-const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
+const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string; returnTarget?: () => DOMRect | undefined }>()
 const emit = defineEmits<{ close: []; likesChanged: [id: number, count: number] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
@@ -37,6 +37,7 @@ const loadError = ref('')
 const playback = ref({ paused: true, current: 0, duration: 0, waiting: false })
 const backOffset = ref(0)
 const backDragging = ref(false)
+const zoomReturning = ref(false)
 const backDuration = ref(220)
 let backClosing = false
 let backSettling = false
@@ -59,6 +60,28 @@ function closePlayer() {
   containerRef.value?.querySelectorAll('video').forEach(video => video.pause())
   emit('close')
 }
+function zoomBack() {
+  if (backClosing || backSettling) return
+  const player = containerRef.value?.parentElement
+  if (!player?.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return closePlayer()
+
+  const bounds = player.getBoundingClientRect()
+  const target = props.returnTarget?.()
+  const visibleTarget = target && target.width > 0 && target.height > 0 &&
+    target.bottom > bounds.top && target.top < bounds.bottom
+  const scale = visibleTarget ? Math.min(target.width / bounds.width, target.height / bounds.height, .85) : .88
+  const x = visibleTarget ? target.left + target.width / 2 - (bounds.left + bounds.width / 2) : 0
+  const y = visibleTarget ? target.top + target.height / 2 - (bounds.top + bounds.height / 2) : 0
+
+  backSettling = true
+  zoomReturning.value = true
+  const animation = player.animate([
+    { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+    { transform: `translate3d(${x}px,${y}px,0) scale(${scale})`, opacity: 0, borderRadius: '16px' },
+  ], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' })
+  void animation.finished.then(closePlayer, closePlayer)
+}
+
 function startBack(event: TouchEvent) {
   if (backClosing || backSettling || showComments.value || panel.value || event.touches.length !== 1) return
   if (event.target instanceof Element && event.target.closest('button,input,textarea,a')) return
@@ -560,10 +583,10 @@ onUnmounted(() => {
 
 <template>
   <div class="short-player relative flex h-full flex-col bg-black text-white"
-    :data-returning="backOffset > 0"
+    :data-returning="backOffset > 0 || zoomReturning"
     :style="{ transform: `translate3d(${backOffset}px,0,0)`, transition: backDragging ? 'none' : `transform ${backDuration}ms cubic-bezier(.16,1,.3,1)` }"
     @touchstart.passive="startBack" @touchmove="moveBack" @touchend.passive="endBack" @touchcancel.passive="cancelBack">
-    <button class="player-close" aria-label="返回视频列表" @click="closePlayer">‹</button>
+    <button class="player-close" aria-label="返回视频列表" @click="zoomBack">‹</button>
 
     <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory">
       <section

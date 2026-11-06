@@ -284,7 +284,12 @@ function selectCategory(category: number | null) {
   selected.value = category
   void load()
 }
+let playbackReturnPoster: HTMLImageElement | null = null
+function playbackReturnTarget() {
+  return playbackReturnPoster?.isConnected ? playbackReturnPoster.getBoundingClientRect() : undefined
+}
 function closePlayer() {
+  playbackReturnPoster = null
   playerIndex.value = null
 }
 const returnCovers = ref<Record<number, string>>({})
@@ -292,6 +297,7 @@ const returnRatios = ref<Record<number, string>>({})
 function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
+  playbackReturnPoster = poster
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
@@ -398,7 +404,7 @@ onMounted(() => {
     </div>
     <Teleport to="body">
       <div v-if="playerIndex !== null" class="player-layer" role="dialog" aria-modal="true" aria-label="短视频播放器" @keydown.esc="closePlayer">
-        <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" @close="closePlayer" />
+        <ShortVideoPlayer :items="playerItems" :initial-index="playerIndex" :initial-cover="playerCover" :return-target="playbackReturnTarget" @close="closePlayer" />
       </div>
     </Teleport>
   </section>
