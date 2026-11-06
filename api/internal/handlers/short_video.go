@@ -33,9 +33,7 @@ func (h *ShortVideoHandler) List(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	target := readEFVM3U8Origin(efvMediaFile)
-	image := readEFVImageOrigin(efvMediaFile)
 	for i := range list {
-		applyEFVImageCover(&list[i], image)
 		h.applyMediaDomain(&list[i], target, false)
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -58,7 +56,6 @@ func (h *ShortVideoHandler) Show(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "private, no-store")
-	applyEFVImageCover(v, readEFVImageOrigin(efvMediaFile))
 	h.applyMediaDomain(v, readEFVM3U8Origin(efvMediaFile), true)
 	_ = h.Repo.IncrementViews(id)
 
@@ -232,9 +229,7 @@ func (h *ShortVideoHandler) Mine(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "private, no-store")
 	target := readEFVM3U8Origin(efvMediaFile)
-	image := readEFVImageOrigin(efvMediaFile)
 	for i := range list {
-		applyEFVImageCover(&list[i], image)
 		h.applyMediaDomain(&list[i], target, false)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": list, "total": total, "page": page, "per_page": per})

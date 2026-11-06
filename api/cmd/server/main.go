@@ -122,10 +122,6 @@ func main() {
 	api.GET("/short-videos/:id/interactions", middleware.AuthOptional(cfg.JWTSecret), shortVidH.Interactions)
 	api.GET("/short-videos/:id/comments", shortVidH.ListComments)
 	api.GET("/short-videos/:id/share", shortVidH.Share)
-	api.GET("/efv-media", (&handlers.EFVImageConfig{
-		MediaFile: "/etc/video/efv-media/domains.json",
-		Cipher:    cfg.EFVImageAESCipher, Key: cfg.EFVImageAESKey, IV: cfg.EFVImageAESIV,
-	}).Show)
 
 	// 直播公开接口
 	api.GET("/live-categories", liveH.ListCategories)

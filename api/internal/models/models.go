@@ -187,10 +187,8 @@ type ShortVideo struct {
 // ShortVideoWithRelations: ShortVideo + 关联 user / category（API 输出形态）
 type ShortVideoWithRelations struct {
 	ShortVideo
-	// CoverFallback is the local copy to show when the EFV image domain fails.
-	CoverFallback *string        `db:"-" json:"cover_fallback,omitempty"`
-	User          *PublicUser    `json:"user"`
-	Category      *ShortCategory `json:"category"`
+	User     *PublicUser    `json:"user"`
+	Category *ShortCategory `json:"category"`
 }
 
 // === ShortVideoComment ===

@@ -127,32 +127,43 @@ $assert($video->fresh()->cover === $expected, 'Refreshing a published cover must
 $assert(\Illuminate\Support\Facades\Storage::disk('public')->get($expected) === $png, 'The updated cover bytes were not stored.');
 echo "EFV published cover refresh checks passed.\n";
 
-// EFV crops 封面1 to a landscape size; a portrait screenshot must replace it.
-$pngOf = function (int $width, int $height): string {
-    $chunk = fn (string $type, string $data) => pack('N', strlen($data)).$type.$data.pack('N', crc32($type.$data));
-    return "\x89PNG\r\n\x1a\n".$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 2, 0, 0, 0)).$chunk('IEND', '');
-};
-$landscape = $pngOf(450, 230);
-$portrait = $pngOf(720, 1280);
-$requested = [];
-$screenshots = ['/videos/x/1.png', '/videos/x/0.png'];
-Http::swap(new \Illuminate\Http\Client\Factory());
-Http::fake(function ($request) use ($id, $landscape, $portrait, &$requested, &$screenshots) {
-    $path = parse_url($request->url(), PHP_URL_PATH);
-    if ($path === '/api/getmoviestatus') {
-        return Http::response(['success' => 1, 'data' => ['_id' => $id, 'poster' => '/cover.png', 'screenshots' => $screenshots]]);
-    }
-    $requested[] = $path;
-    return Http::response($path === '/cover.png' ? $landscape : $portrait, 200, ['Content-Type' => 'image/png']);
-});
-Video::whereKey($video->id)->update(['cover' => 'shorts/covers/efv-old.webp']);
-(new EfvShortVideoSync())->refreshPublishedCover($video->fresh(), $id);
-$assert($video->fresh()->cover === 'shorts/covers/efv-'.hash('sha256', $portrait).'.png', 'A portrait screenshot must replace a cropped landscape poster.');
-$assert($requested === ['/cover.png', '/videos/x/1.png'], 'Only the poster and first screenshot should be fetched.');
+// CMS imports must sync 封面1 (cover.webp beside the HLS output), not the vod_pic preview.
+$fromCms = new ReflectionMethod(EfvShortVideoImport::class, 'fromCms');
+$movie = $fromCms->invoke(new EfvShortVideoImport(), [
+    'type_name' => '国产短视频', 'vod_id' => $id, 'vod_name' => 't',
+    'vod_play_url' => 'HD$https://efv.example.test/videos/202611/05/'.$id.'/abc123/index.m3u8',
+    'vod_pic' => 'https://efv.example.test/preview/small.webp',
+], 'https://efv.example.test');
+$assert($movie['poster'] === '/videos/202611/05/'.$id.'/cover.webp', 'CMS import must use 封面1 as the primary cover.');
+$assert($movie['poster2']['url'] === 'https://efv.example.test/preview/small.webp', 'The CMS preview must remain a fallback.');
+$covers = (new EfvShortVideoSync())->coverCandidates($movie);
+$assert($covers[0] === 'https://efv.example.test/videos/202611/05/'.$id.'/cover.webp', '封面1 must be downloaded first.');
+$auto = $fromCms->invoke(new EfvShortVideoImport(), [
+    'type_name' => '国产短视频', 'vod_id' => $id, 'vod_play_url' => 'https://efv.example.test/movie/auto/'.$id.'.m3u8',
+    'vod_pic' => 'https://efv.example.test/preview/small.webp',
+], 'https://efv.example.test');
+$assert($auto['poster'] === 'https://efv.example.test/preview/small.webp', 'Without an EFV movie folder the preview is used.');
+echo "EFV CMS cover1 mapping checks passed.\n";
 
-$screenshots = [];
-$requested = [];
-Video::whereKey($video->id)->update(['cover' => 'shorts/covers/efv-old.webp']);
-(new EfvShortVideoSync())->refreshPublishedCover($video->fresh(), $id);
-$assert($video->fresh()->cover === 'shorts/covers/efv-'.hash('sha256', $landscape).'.png', 'Without a portrait alternative the poster must be kept.');
-echo "EFV portrait cover preference checks passed.\n";
+// efv:refresh-covers replaces a synced preview with 封面1 and leaves manual covers alone.
+$cover1 = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAEElEQVR42mP8z8DAwMDAAAAMAAH8yBLzAAAAAElFTkSuQmCC');
+DB::table('efv_gallery_batches')->insert(['section' => 'category-import', 'files' => json_encode([
+    ['efv_id' => $id, 'video_id' => 20], ['efv_id' => $removed, 'video_id' => 21],
+])]);
+Video::forceCreate(['id' => 20, 'type' => 'short', 'title' => 'preview', 'status' => 'published', 'cover' => 'shorts/covers/efv-preview.webp']);
+Video::forceCreate(['id' => 21, 'type' => 'short', 'title' => 'manual', 'status' => 'published', 'cover' => 'shorts/covers/manual.jpg']);
+Http::swap(new \Illuminate\Http\Client\Factory());
+Http::fake(function ($request) use ($id, $removed, $cover1) {
+    if (parse_url($request->url(), PHP_URL_PATH) === '/api/getmoviestatus') {
+        $movie = $request['id'] === $removed ? $removed : $id;
+        return Http::response(['success' => 1, 'data' => ['_id' => $movie, 'poster' => '/videos/202611/05/'.$movie.'/cover.png']]);
+    }
+    return Http::response($cover1, 200, ['Content-Type' => 'image/png']);
+});
+$exit = \Illuminate\Support\Facades\Artisan::call('efv:refresh-covers', ['--video' => [20, 21]]);
+$output = \Illuminate\Support\Facades\Artisan::output();
+$assert($exit === 0, 'efv:refresh-covers failed: '.$output);
+$assert(Video::find(20)->cover === 'shorts/covers/efv-'.hash('sha256', $cover1).'.png', 'The preview cover was not replaced with 封面1.');
+$assert(Video::find(21)->cover === 'shorts/covers/manual.jpg', 'A manually uploaded cover must not be replaced.');
+$assert(str_contains($output, '更新为封面1 1'), 'The command must report the updated count.');
+echo "efv:refresh-covers checks passed.\n";

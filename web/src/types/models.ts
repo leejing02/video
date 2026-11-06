@@ -55,8 +55,6 @@ export interface ShortVideo {
   description: string | null
   url: string
   cover: string | null
-  /** Local copy used when the EFV image domain cannot be loaded. */
-  cover_fallback?: string | null
   duration: number
   views: number
   likes: number

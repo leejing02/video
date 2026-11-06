@@ -11,7 +11,7 @@
 ## 必需的环境变量（只列名称）
 
 `EFV_ENDPOINT`、`EFV_API_KEY`、`EFV_CMS_API_KEY`、`EFV_UPLOAD_KEY`、`EFV_API_SECRET`、`EFV_PLAYBACK_KEY`、
-`EFV_IMAGE_AES_KEY`、`EFV_IMAGE_AES_IV`、`EFV_IMAGE_AES_CIPHER`（api 与 admin 都需要后三项）。
+`EFV_IMAGE_AES_KEY`、`EFV_IMAGE_AES_IV`、`EFV_IMAGE_AES_CIPHER`（admin 下载封面时解密用）。
 本机根目录 `.env.prod` 不含 EFV 配置；`env.prod_1106.tar.gz` 里的副本含有。
 
 ## 更新命令（只快进，按改动目录重建）
@@ -34,8 +34,18 @@ SVCS=$(for s in api admin web; do echo "$CHANGED" | grep -q "^$s/" && echo "$s";
 ## 部署后检查
 
 - 版本：`git -C /www/wwwroot/video log --oneline -1`
-- 封面配置：`curl -s https://www.e3y5.cc/api/efv-media`（返回含密钥，勿外传）
+- 封面：前台封面请求应只发往本站 `/storage/shorts/covers/`。
 - 线上前端版本：查看 `https://www.e3y5.cc/short` 引用的 `/assets/main-*.css` 是否包含新规则。
+
+## 封面重新同步为封面1（admin 部署后执行一次）
+
+```bash
+cd /www/wwwroot/video && docker compose --project-directory . --env-file .env.prod \
+  -f deploy/docker-compose.prod.yml -f deploy/docker-compose.source.yml \
+  exec admin php artisan efv:refresh-covers
+```
+
+只处理单条：在命令末尾加 `--video=1027`。前台约 90 秒内（Go 元数据缓存刷新）显示新封面。
 
 ## 回滚
 

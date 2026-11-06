@@ -8,7 +8,6 @@ const emit = defineEmits<{ coverSettled: [] }>()
 const failed = ref(false)
 const loaded = ref(false)
 const cover = computed(() => props.cachedCover || mediaUrl(props.video.cover))
-const coverFallback = computed(() => props.cachedCover ? '' : mediaUrl((props.video as ShortVideo).cover_fallback))
 watch(cover, () => {
   failed.value = false
   loaded.value = false
@@ -36,7 +35,7 @@ async function coverLoaded(event: Event) {
 <template>
   <button class="video-tile" :class="{ landscape: layout === 'horizontal', invisible: hidePendingCover && cover && !loaded && !failed }" :aria-label="`播放：${video.title}`">
     <div class="video-poster">
-      <img v-if="cover && !failed" v-efv-cover-blob="cover" :data-cover-fallback="coverFallback || undefined" :data-video-cover="video.id" :style="coverRatio ? { aspectRatio: 'auto ' + coverRatio } : undefined" alt="" :loading="eagerCover ? 'eager' : 'lazy'" @load="coverLoaded" @error="settleCover(false)" />
+      <img v-if="cover && !failed" v-efv-cover-blob="cover" :data-video-cover="video.id" :style="coverRatio ? { aspectRatio: 'auto ' + coverRatio } : undefined" alt="" :loading="eagerCover ? 'eager' : 'lazy'" @load="coverLoaded" @error="settleCover(false)" />
       <div v-else class="poster-fallback"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="32" rx="5"/><path d="m20 17 12 7-12 7Z"/></svg><span>暂无封面</span></div>
       <span v-if="layout === 'horizontal' && video.duration" class="video-duration">{{ Math.floor(video.duration / 60) }}:{{ String(Math.floor(video.duration % 60)).padStart(2, '0') }}</span>
     </div>

@@ -180,7 +180,9 @@ class EfvShortVideoImport
                                 $stats['updated']++;
                                 if (!$preview) {
                                     try {
-                                        $sync->applyTranscodedMovie($video, $movie, refreshCover: blank($video->cover));
+                                        // Also correct covers synced from the old vod_pic preview; keep manual uploads.
+                                        $sync->applyTranscodedMovie($video, $movie, refreshCover: blank($video->cover)
+                                            || str_starts_with((string) $video->cover, 'shorts/covers/efv-'));
                                         $video->update([
                                             'title' => Str::limit(trim((string) ($movie['originalname'] ?? '')) ?: '未命名短视频', 150, ''),
                                             'description' => Str::limit((string) ($movie['summary'] ?? ''), 500, ''),
@@ -265,6 +267,12 @@ class EfvShortVideoImport
         }
 
         $duration = (string) ($movie['vod_duration'] ?? '');
+        // vod_pic is EFV's small collection preview (e.g. 450x230), not 封面1. 封面1 sits
+        // beside the HLS output as /videos/<YYYYMM>/<DD>/<id>/cover.webp; keep the
+        // preview only as a fallback when that path cannot be derived or fetched.
+        $cover = isset($streams[0]) && preg_match('~^(/videos/\d{6}/\d{2}/[a-f0-9]{24})/~D', $streams[0]['path'], $dir)
+            ? $dir[1].'/cover.webp'
+            : null;
 
         return [
             '_id' => $movie['vod_id'] ?? null,
@@ -273,8 +281,8 @@ class EfvShortVideoImport
             'originalname' => $movie['vod_name'] ?? '',
             'summary' => strip_tags((string) ($movie['vod_content'] ?? '')),
             'm3u8paths' => $streams,
-            'poster' => $movie['vod_pic'] ?? null,
-            'poster2' => ['url' => $movie['vod_pic_slide'] ?? null],
+            'poster' => $cover ?? $movie['vod_pic'] ?? null,
+            'poster2' => ['url' => $cover ? ($movie['vod_pic'] ?? null) : ($movie['vod_pic_slide'] ?? null)],
             'time' => preg_match('/^\d{1,4}:\d{2}:\d{2}$/D', $duration) || is_numeric($duration) ? $duration : '',
         ];
     }

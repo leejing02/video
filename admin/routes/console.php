@@ -73,6 +73,45 @@ Schedule::command('efv:sync-short-videos')
     ->everyMinute()
     ->withoutOverlapping(5);
 
+// One-off resync: replace every published EFV short video's local cover with EFV
+// 封面1 now, instead of waiting for the scheduled task to reach each video. Earlier
+// CMS imports stored the small vod_pic preview (e.g. 450x230) instead of 封面1.
+Artisan::command('efv:refresh-covers {--video=* : 只刷新这些本站短视频 ID}', function () {
+    $sync = app(EfvShortVideoSync::class);
+    $only = array_map('intval', (array) $this->option('video'));
+    $stats = ['checked' => 0, 'updated' => 0, 'unchanged' => 0, 'failed' => 0];
+    $seen = [];
+    foreach ($sync->linkedMovies() as $videoId => $movieId) {
+        if (isset($seen[$videoId]) || ($only && !in_array($videoId, $only, true))) {
+            continue;
+        }
+        $seen[$videoId] = true;
+        $video = Video::find($videoId);
+        // Same scope as the scheduled refresh: never replace a manually uploaded cover.
+        if (!$video || $video->type !== Video::TYPE_SHORT || $video->status !== Video::STATUS_PUBLISHED
+            || !str_starts_with((string) $video->cover, 'shorts/covers/efv-')) {
+            continue;
+        }
+        $stats['checked']++;
+        $before = $video->cover;
+        try {
+            $sync->refreshPublishedCover($video, $movieId);
+            if ($video->fresh()->cover === $before) {
+                $stats['unchanged']++;
+            } else {
+                $stats['updated']++;
+                $this->line("短视频 {$videoId}：已更新为封面1");
+            }
+        } catch (DomainException $exception) {
+            $stats['failed']++;
+            $this->warn("短视频 {$videoId}：{$exception->getMessage()}");
+        }
+    }
+    $this->info("检查 {$stats['checked']}，更新为封面1 {$stats['updated']}，未变化 {$stats['unchanged']}，失败 {$stats['failed']}。");
+
+    return $stats['failed'] ? 1 : 0;
+})->purpose('立即把已发布 EFV 短视频的封面重新同步为 EFV 封面1');
+
 Artisan::command('efv:import-domestic-shorts {--preview : 只统计，不导入} {--cms : 使用苹果 CMS 采集接口} {--sync : 更新已导入的视频，并下架 EFV 已移除的视频}', function () {
     try {
         $stats = app(\App\Services\EfvShortVideoImport::class)->run(
