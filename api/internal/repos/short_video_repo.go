@@ -85,7 +85,7 @@ func (r *ShortVideoRepo) listDB(f ListShortVideoFilter) ([]models.ShortVideoWith
 	}{}
 	q := `
 		SELECT
-			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.url,
+			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.cover_source, v.url,
 			v.duration, v.views, v.likes, v.comments_count, v.favorites, v.shares,
 			v.status, v.published_at, v.created_at,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,
@@ -135,7 +135,7 @@ func (r *ShortVideoRepo) findByIDDB(id int64) (*models.ShortVideoWithRelations, 
 	}{}
 	q := `
 		SELECT
-			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.url,
+			v.id, v.user_id, v.category_id, v.title, v.description, v.cover, v.cover_source, v.url,
 			v.duration, v.views, v.likes, v.comments_count, v.favorites, v.shares,
 			v.status, v.published_at, v.created_at,
 			u.id  AS u_id, u.name AS u_name, u.username AS u_username, u.avatar AS u_avatar,

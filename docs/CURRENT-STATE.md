@@ -24,20 +24,20 @@
 
 ## 本次改动（2026-11-07，已在本地验证，待提交）
 
-- 撤回 `ba9e15f`：前台封面恢复为本站副本，不再请求 `tupian.5cpic1.top`、不再在浏览器解密；移除 `/api/efv-media`、`cover_fallback`、api 的 `EFV_IMAGE_AES_*` 环境变量。
-- 撤回 `ce748f9`：后台同步严格使用封面1（`poster`），只有封面1 取不到时才用封面2。
-- 「国产」CMS 导入：主封面改为 `/videos/<日期>/<ID>/cover.webp`（封面1），`vod_pic` 预览图仅作备用。
-- 新增一次性命令 `php artisan efv:refresh-covers`（可加 `--video=ID` 只处理指定视频）：立即把已发布 EFV 短视频的本站封面重新同步为封面1，不替换手动上传的封面。
-- `efv:import-domestic-shorts --sync` 更新已导入视频时，也会把旧的预览图封面纠正为封面1。
-- 定时任务 `efv:sync-short-videos`（每分钟）刷新封面时取 EFV 查询接口的 `poster`（封面1），撤回 `ce748f9` 后严格使用封面1。
-- 部署需要重建 api、admin、web。
+`3326ac4` 曾撤回加密封面（前台改用本站副本），用户随后要求：**图片保持加密，地址同步到数据库，前台按数据库地址获取**。现状：
+
+- 恢复 `ba9e15f` 的加密加载：前台从图片域名取封面并在浏览器解密，失败退回本站副本；恢复 `/api/efv-media`、`cover_fallback`、api 的 `EFV_IMAGE_AES_*`。
+- 新增字段 `videos.cover_source`（迁移 `2026_11_07_000000_add_cover_source_to_videos`）：后台同步封面时记录实际使用的封面1 地址。
+- Go 不再从视频地址推算 `cover.webp`，只用数据库 `cover_source`；没有地址的视频用本站副本。
+- 保留 `3326ac4` 的其余部分：同步严格用封面1；「国产」CMS 导入用封面1，`vod_pic` 仅备用；`import --sync` 纠正旧预览图封面；`efv:refresh-covers` 现在也会写入 `cover_source`。
+- 部署顺序见 DEPLOYMENT.md「数据库字段 videos.cover_source」：先 admin + 迁移，再 api/web，最后 `efv:refresh-covers`。
 
 ## 待验证（需要 iPhone iOS 26 Safari 真机）
 
 1. 进入任何视频状态栏都为黑色，返回时随列表立即变白（`a21c51b`）。
 2. 返回动画与 `cankao/IMG_3420.MP4` 一致；在播放页滑到其他视频后返回也能缩回对应卡片。
 3. 部署后「国产」分类封面是否已由定时任务更新为封面1（原 450×230 预览小图）。
-4. 前台 Network 中封面请求只发往本站 `/storage/shorts/covers/`，不再请求 EFV 图片域名。
+4. 运行 `efv:refresh-covers` 后，前台封面请求发往图片域名、`src` 为 `blob:`，「国产」显示封面1。
 
 ## 已知问题与风险
 

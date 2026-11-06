@@ -25,6 +25,11 @@ type Config struct {
 
 	EFVEndpoint    string
 	EFVPlaybackKey string
+
+	// EFV encrypts covers on the image domain; browsers decrypt them with these.
+	EFVImageAESKey    string
+	EFVImageAESIV     string
+	EFVImageAESCipher string
 }
 
 // GamePort returns the fishing game server port (default 8001).
@@ -64,6 +69,10 @@ func Load() *Config {
 
 		EFVEndpoint:    getEnv("EFV_ENDPOINT", ""),
 		EFVPlaybackKey: os.Getenv("EFV_PLAYBACK_KEY"),
+
+		EFVImageAESKey:    os.Getenv("EFV_IMAGE_AES_KEY"),
+		EFVImageAESIV:     os.Getenv("EFV_IMAGE_AES_IV"),
+		EFVImageAESCipher: getEnv("EFV_IMAGE_AES_CIPHER", "aes-256-ctr"),
 	}
 }
 

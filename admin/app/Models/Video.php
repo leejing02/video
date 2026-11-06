@@ -26,6 +26,7 @@ class Video extends Model
         'title',
         'description',
         'cover',
+        'cover_source',
         'url',
         'duration',
         'views',

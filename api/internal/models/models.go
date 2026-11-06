@@ -166,12 +166,14 @@ type ShortCategory struct {
 // === ShortVideo ===
 // videos 表 type='short' 的子集
 type ShortVideo struct {
-	ID            int64      `db:"id"             json:"id"`
-	UserID        int64      `db:"user_id"        json:"user_id"`
-	CategoryID    int64      `db:"category_id"    json:"category_id"`
-	Title         string     `db:"title"          json:"title"`
-	Description   *string    `db:"description"    json:"description"`
-	Cover         *string    `db:"cover"          json:"cover"`
+	ID          int64   `db:"id"             json:"id"`
+	UserID      int64   `db:"user_id"        json:"user_id"`
+	CategoryID  int64   `db:"category_id"    json:"category_id"`
+	Title       string  `db:"title"          json:"title"`
+	Description *string `db:"description"    json:"description"`
+	Cover       *string `db:"cover"          json:"cover"`
+	// EFV path of the synced 封面1; the handler turns it into an image-domain URL.
+	CoverSource   *string    `db:"cover_source" json:"cover_source,omitempty"`
 	URL           string     `db:"url"            json:"url"`
 	Duration      int        `db:"duration"       json:"duration"`
 	Views         int64      `db:"views"          json:"views"`
@@ -187,8 +189,10 @@ type ShortVideo struct {
 // ShortVideoWithRelations: ShortVideo + 关联 user / category（API 输出形态）
 type ShortVideoWithRelations struct {
 	ShortVideo
-	User     *PublicUser    `json:"user"`
-	Category *ShortCategory `json:"category"`
+	// CoverFallback is the local copy to show when the EFV image domain fails.
+	CoverFallback *string        `db:"-" json:"cover_fallback,omitempty"`
+	User          *PublicUser    `json:"user"`
+	Category      *ShortCategory `json:"category"`
 }
 
 // === ShortVideoComment ===

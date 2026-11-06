@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS `videos` (
   `title` VARCHAR(255) NOT NULL,
   `description` TEXT NULL,
   `cover` VARCHAR(255) NULL,
+  `cover_source` VARCHAR(255) NULL COMMENT 'EFV 封面1 路径（图片域名上的加密文件）',
   `url` VARCHAR(255) NOT NULL,
   `md5` VARCHAR(32) NULL,
   `size_bytes` BIGINT UNSIGNED NOT NULL DEFAULT 0,

@@ -13,6 +13,21 @@ use DomainException;
 
 class EfvShortVideoSync
 {
+    /** EFV path (e.g. /videos/<YYYYMM>/<DD>/<id>/cover.webp) of the last downloaded cover. */
+    private ?string $downloadedCoverSource = null;
+
+    public function downloadedCoverSource(): ?string
+    {
+        return $this->downloadedCoverSource;
+    }
+
+    /** Only EFV movie media paths are stored; the image domain is applied when serving. */
+    private static function efvCoverPath(string $url): ?string
+    {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+
+        return preg_match('~^/videos/[A-Za-z0-9_/-]+\.(?:webp|jpe?g|png|gif)$~D', $path) ? $path : null;
+    }
     public function movieId(Video $video): ?string
     {
         if ($video->type !== Video::TYPE_SHORT) {
@@ -64,14 +79,16 @@ class EfvShortVideoSync
         if (!$cover) {
             throw new DomainException('未取得可用的 EFV 封面。');
         }
-        if ($cover === $previous) {
+        $source = $this->downloadedCoverSource;
+        if ($cover === $previous && $source === $video->cover_source) {
             return;
         }
 
         // Keep a cover an editor or another sync saved while the request was in flight.
+        // cover_source is the 封面1 address the front end loads (encrypted) via the image domain.
         $video->newQuery()->whereKey($video->getKey())
             ->where('status', Video::STATUS_PUBLISHED)
-            ->where('cover', $previous)->update(['cover' => $cover]);
+            ->where('cover', $previous)->update(['cover' => $cover, 'cover_source' => $source]);
     }
 
     public function sync(Video $video, ?string $id, bool $automatic = false): ?string
@@ -122,10 +139,12 @@ class EfvShortVideoSync
         $imageOrigin = app(EfvMediaDomains::class)->read()['image_origin'];
         $replaceCover = $refreshCover && $this->canReplaceCover($video, $covers, $automatic);
         $cover = null;
+        $coverSource = null;
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
             try {
                 $cover = $this->downloadCover($covers, $imageOrigin, fresh: true);
+                $coverSource = $this->downloadedCoverSource;
             } catch (DomainException $exception) {
                 $coverFailure = $exception->getMessage();
             }
@@ -138,15 +157,17 @@ class EfvShortVideoSync
             $duration = (int) ceil((float) $time);
         }
 
-        DB::transaction(function () use ($video, $url, $cover, $covers, $duration, $automatic) {
+        DB::transaction(function () use ($video, $url, $cover, $coverSource, $covers, $duration, $automatic) {
             $record = $video->newQuery()->lockForUpdate()->findOrFail($video->getKey());
             if ($automatic && !$this->needsAutomaticSync($record)) {
                 return;
             }
 
+            $replace = $cover && $this->canReplaceCover($record, $covers, $automatic);
             $record->update([
                 'url' => $automatic && filled($record->url) ? $record->url : $url,
-                'cover' => $cover && $this->canReplaceCover($record, $covers, $automatic) ? $cover : $record->cover,
+                'cover' => $replace ? $cover : $record->cover,
+                'cover_source' => $replace ? $coverSource : $record->cover_source,
                 'duration' => $duration ?: $record->duration,
                 'status' => Video::STATUS_PUBLISHED,
                 'published_at' => $record->published_at ?? now(),
@@ -187,14 +208,19 @@ class EfvShortVideoSync
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $failure = null;
+        $this->downloadedCoverSource = null;
         foreach ($covers as $candidate) {
             try {
                 $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
                 $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source, $fresh) : null;
                 if ($cover) {
                     $path = 'shorts/covers/efv-'.hash('sha256', $cover['bytes']).'.'.$cover['extension'];
+                    if (!Storage::disk('public')->put($path, $cover['bytes'])) {
+                        return null;
+                    }
+                    $this->downloadedCoverSource = self::efvCoverPath($candidate);
 
-                    return Storage::disk('public')->put($path, $cover['bytes']) ? $path : null;
+                    return $path;
                 }
             } catch (DomainException $exception) {
                 $failure = $exception;

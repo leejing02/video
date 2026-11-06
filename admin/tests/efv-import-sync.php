@@ -22,7 +22,7 @@ config([
 DB::purge('sqlite');
 Schema::create('videos', function ($table) {
     $table->id();
-    foreach (['type', 'title', 'description', 'url', 'status', 'cover'] as $column) $table->string($column)->nullable();
+    foreach (['type', 'title', 'description', 'url', 'status', 'cover', 'cover_source'] as $column) $table->string($column)->nullable();
     $table->timestamps();
 });
 Schema::create('efv_gallery_batches', function ($table) {
@@ -164,6 +164,8 @@ $exit = \Illuminate\Support\Facades\Artisan::call('efv:refresh-covers', ['--vide
 $output = \Illuminate\Support\Facades\Artisan::output();
 $assert($exit === 0, 'efv:refresh-covers failed: '.$output);
 $assert(Video::find(20)->cover === 'shorts/covers/efv-'.hash('sha256', $cover1).'.png', 'The preview cover was not replaced with 封面1.');
+$assert(Video::find(20)->cover_source === '/videos/202611/05/'.$id.'/cover.png', 'The 封面1 address must be stored for the front end.');
+$assert(Video::find(21)->cover_source === null, 'A manual cover must not get an EFV address.');
 $assert(Video::find(21)->cover === 'shorts/covers/manual.jpg', 'A manually uploaded cover must not be replaced.');
-$assert(str_contains($output, '更新为封面1 1'), 'The command must report the updated count.');
+$assert(str_contains($output, '更新为封面1 1') && str_contains($output, '/videos/202611/05/'), 'The command must report the updated count.');
 echo "efv:refresh-covers checks passed.\n";

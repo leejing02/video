@@ -73,9 +73,9 @@ Schedule::command('efv:sync-short-videos')
     ->everyMinute()
     ->withoutOverlapping(5);
 
-// One-off resync: replace every published EFV short video's local cover with EFV
-// 封面1 now, instead of waiting for the scheduled task to reach each video. Earlier
-// CMS imports stored the small vod_pic preview (e.g. 450x230) instead of 封面1.
+// One-off resync: store every published EFV short video's 封面1 address (cover_source,
+// loaded encrypted by the front end) and its local copy now, instead of waiting for the
+// scheduled task. Earlier CMS imports stored the small vod_pic preview instead of 封面1.
 Artisan::command('efv:refresh-covers {--video=* : 只刷新这些本站短视频 ID}', function () {
     $sync = app(EfvShortVideoSync::class);
     $only = array_map('intval', (array) $this->option('video'));
@@ -93,14 +93,15 @@ Artisan::command('efv:refresh-covers {--video=* : 只刷新这些本站短视频
             continue;
         }
         $stats['checked']++;
-        $before = $video->cover;
+        $before = [$video->cover, $video->cover_source];
         try {
             $sync->refreshPublishedCover($video, $movieId);
-            if ($video->fresh()->cover === $before) {
+            $after = $video->fresh();
+            if ([$after->cover, $after->cover_source] === $before) {
                 $stats['unchanged']++;
             } else {
                 $stats['updated']++;
-                $this->line("短视频 {$videoId}：已更新为封面1");
+                $this->line("短视频 {$videoId}：已同步封面1 {$after->cover_source}");
             }
         } catch (DomainException $exception) {
             $stats['failed']++;

@@ -11,7 +11,7 @@
 ## 必需的环境变量（只列名称）
 
 `EFV_ENDPOINT`、`EFV_API_KEY`、`EFV_CMS_API_KEY`、`EFV_UPLOAD_KEY`、`EFV_API_SECRET`、`EFV_PLAYBACK_KEY`、
-`EFV_IMAGE_AES_KEY`、`EFV_IMAGE_AES_IV`、`EFV_IMAGE_AES_CIPHER`（admin 下载封面时解密用）。
+`EFV_IMAGE_AES_KEY`、`EFV_IMAGE_AES_IV`、`EFV_IMAGE_AES_CIPHER`（admin 下载副本时解密；api 通过 `/api/efv-media` 提供给浏览器解密）。
 本机根目录 `.env.prod` 不含 EFV 配置；`env.prod_1106.tar.gz` 里的副本含有。
 
 ## 更新命令（只快进，按改动目录重建）
@@ -34,18 +34,22 @@ SVCS=$(for s in api admin web; do echo "$CHANGED" | grep -q "^$s/" && echo "$s";
 ## 部署后检查
 
 - 版本：`git -C /www/wwwroot/video log --oneline -1`
-- 封面：前台封面请求应只发往本站 `/storage/shorts/covers/`。
+- 封面：前台封面请求发往图片域名，`img` 的 `src` 为 `blob:`；若为 `/storage/shorts/covers/…` 说明解密失败或该视频尚无 `cover_source`。
 - 线上前端版本：查看 `https://www.e3y5.cc/short` 引用的 `/assets/main-*.css` 是否包含新规则。
 
-## 封面重新同步为封面1（admin 部署后执行一次）
+## 数据库字段 `videos.cover_source`（2026-11-07 新增）
+
+Go 接口会查询该字段，**必须先迁移数据库再重建 api**，否则短视频接口会报错。包含该改动的部署按下面顺序：
 
 ```bash
-cd /www/wwwroot/video && docker compose --project-directory . --env-file .env.prod \
-  -f deploy/docker-compose.prod.yml -f deploy/docker-compose.source.yml \
-  exec admin php artisan efv:refresh-covers
+cd /www/wwwroot/video && C="docker compose --project-directory . --env-file .env.prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.source.yml" && \
+git fetch origin "refs/heads/$(git symbolic-ref --short HEAD)" && git merge --ff-only FETCH_HEAD && \
+$C up -d --build --no-deps admin && $C exec admin php artisan migrate --force && \
+$C up -d --build --no-deps api web && \
+$C exec admin php artisan efv:refresh-covers
 ```
 
-只处理单条：在命令末尾加 `--video=1027`。前台约 90 秒内（Go 元数据缓存刷新）显示新封面。
+`efv:refresh-covers` 把已发布 EFV 短视频的封面1 地址写入数据库并更新本站副本；只处理单条时末尾加 `--video=1027`。前台约 90 秒内（Go 元数据缓存刷新）生效。
 
 ## 回滚
 

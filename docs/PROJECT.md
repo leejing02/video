@@ -16,7 +16,7 @@
 | 目录 | 技术 | 职责 |
 | --- | --- | --- |
 | `web/` | Vue 3 + Vite + Tailwind | 用户网站；`index.html` 普通页面（白色），`player.html` iPhone 独立黑色播放页 |
-| `api/` | Go 1.25 + Gin + sqlx | 公开接口、聊天 WebSocket、短视频列表/播放签名、M3U8 域名切换 |
+| `api/` | Go 1.25 + Gin + sqlx | 公开接口、聊天 WebSocket、短视频列表/播放签名、按数据库封面地址返回加密封面、`/api/efv-media` |
 | `admin/` | Laravel 11 + Filament | 后台、批量上传到 EFV、EFV 同步/导入（`app/Services/Efv*.php`、`routes/console.php`） |
 | `deploy/` | Docker Compose | `docker-compose.prod.yml` + `docker-compose.source.yml`（源码构建） |
 
@@ -26,8 +26,9 @@ Go 与 Laravel 共用同一个 MySQL；Redis 用于 Go 的元数据/消息缓存
 
 - 短视频存在 `videos` 表（`type='short'`），没有单独的短视频表。
 - EFV 上传 → 后台 `efv:sync-short-videos`（定时任务）补齐 M3U8、封面、时长 → 前台展示。
-- 封面：后台把 EFV 封面1（`/videos/<日期>/<ID>/cover.webp`，图片域名上为加密文件，后台解密）下载为本站副本
-  `storage/shorts/covers/efv-<sha256>`；前台只读本站副本。定时任务 `efv:sync-short-videos` 会逐步刷新已发布视频的封面。
+- 封面：后台同步时把 EFV 封面1 地址写入 `videos.cover_source`，并下载解密一份本站副本到 `cover`（`storage/shorts/covers/efv-<sha256>`）。
+  Go 接口返回 `image_origin + cover_source + ?v=<副本哈希前12位>`，浏览器按 `/api/efv-media` 的 AES 配置解密为 Blob 显示，失败退回 `cover_fallback`（本站副本）。
+  没有 `cover_source` 的视频直接用本站副本。
 - 媒体域名配置：`deploy/efv-media/domains.json`（`image_origin`、`m3u8_origin`），运行时读取。
 - 播放：`m3u8_origin` + EFV 防盗链签名（`EFV_PLAYBACK_KEY`）。
 

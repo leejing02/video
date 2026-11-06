@@ -1,4 +1,5 @@
 import type { ObjectDirective } from 'vue'
+import { decodeEfvImage, isEfvImageUrl, type EfvImageConfig } from './efv-image'
 
 interface CoverRequest {
   controller: AbortController
@@ -11,7 +12,30 @@ const requests = new WeakMap<HTMLElement, CoverRequest>()
 const efvCoverPath = /^\/efv-covers\/\d+(?:\?.*)?$/
 const warmedCovers = new Map<string, { blob: Promise<Blob>; expiresAt: number }>()
 
+let imageConfig: Promise<EfvImageConfig | null> | undefined
+function loadImageConfig() {
+  imageConfig ??= fetch('/api/efv-media', { cache: 'no-store' })
+    .then(response => (response.ok ? response.json() as Promise<EfvImageConfig> : null))
+    .catch(() => null)
+    .then(config => {
+      // Retry later instead of keeping a failed lookup for the whole session.
+      if (!config) setTimeout(() => { imageConfig = undefined }, 30_000)
+      return config
+    })
+  return imageConfig
+}
+
+const needsFetch = (value: string) => efvCoverPath.test(value) || isEfvImageUrl(value)
+
 async function fetchCover(value: string, signal: AbortSignal) {
+  if (isEfvImageUrl(value)) {
+    // The EFV image domain sends encrypted bytes with CORS; decrypt them here.
+    const [response, config] = await Promise.all([fetch(value, { signal, mode: 'cors' }), loadImageConfig()])
+    if (!response.ok) throw new Error('EFV image request failed')
+    const blob = await decodeEfvImage(await response.arrayBuffer(), config)
+    if (!blob?.size) throw new Error('EFV image could not be decoded')
+    return blob
+  }
   const response = await fetch(value, { signal })
   if (!response.ok) throw new Error('EFV cover request failed')
   const blob = await response.blob()
@@ -20,7 +44,7 @@ async function fetchCover(value: string, signal: AbortSignal) {
 }
 
 export function prefetchCover(value: string, expiresAt: number) {
-  if (!efvCoverPath.test(value)) {
+  if (!needsFetch(value)) {
     const image = new Image()
     image.src = value
     return image.decode().catch(() => {})
@@ -49,7 +73,7 @@ function release(el: HTMLElement) {
 function setCover(el: HTMLElement, value: string, poster: boolean) {
   release(el)
   const attribute = poster ? 'poster' : 'src'
-  if (!efvCoverPath.test(value)) {
+  if (!needsFetch(value)) {
     if (value) el.setAttribute(attribute, value)
     else el.removeAttribute(attribute)
     return
@@ -72,7 +96,11 @@ function setCover(el: HTMLElement, value: string, poster: boolean) {
       request.objectUrl = URL.createObjectURL(blob)
       el.setAttribute(attribute, request.objectUrl)
     } catch {
-      if (requests.get(el) === request && !poster) el.dispatchEvent(new Event('error'))
+      if (requests.get(el) !== request) return
+      // EFV domain unreachable or undecodable: show the local copy instead.
+      const fallback = el.dataset.coverFallback
+      if (fallback && fallback !== value) setCover(el, fallback, poster)
+      else if (!poster) el.dispatchEvent(new Event('error'))
     }
   }
 
