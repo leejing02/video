@@ -136,6 +136,9 @@ services:
       CORS_ORIGINS: "https://${ADMIN_DOMAIN},https://${API_DOMAIN}"
       EFV_ENDPOINT: "${EFV_ENDPOINT:-https://houtai.houtai2026.top}"
       EFV_PLAYBACK_KEY: "${EFV_PLAYBACK_KEY:-}"
+      EFV_IMAGE_AES_KEY: "${EFV_IMAGE_AES_KEY:-}"
+      EFV_IMAGE_AES_IV: "${EFV_IMAGE_AES_IV:-}"
+      EFV_IMAGE_AES_CIPHER: "${EFV_IMAGE_AES_CIPHER:-aes-256-ctr}"
       VIDEO_CACHE_ENABLED: "${VIDEO_CACHE_ENABLED:-true}"
       VIDEO_CACHE_DIR: /var/cache/video-metadata
       VIDEO_CACHE_REDIS_ADDR: redis:6379

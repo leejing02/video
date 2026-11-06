@@ -598,7 +598,7 @@ onUnmounted(() => {
         class="relative h-full w-full snap-start flex items-center justify-center overflow-hidden bg-black"
         @click="togglePlay"
       >
-        <img v-if="isNear(idx) && (v.cover || (idx === initialIndex && initialCover))" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" alt="" class="short-playback-cover absolute left-0 top-1/2 h-full w-full -translate-y-1/2 object-fill bg-black" @load="coverReady($event, idx)" :loading="isNear(idx) ? 'eager' : 'lazy'" />
+        <img v-if="isNear(idx) && (v.cover || (idx === initialIndex && initialCover))" v-efv-cover-blob="(idx === initialIndex && initialCover) || mediaUrl(v.cover)" :data-cover-fallback="mediaUrl(v.cover_fallback) || undefined" alt="" class="short-playback-cover absolute left-0 top-1/2 h-full w-full -translate-y-1/2 object-fill bg-black" @load="coverReady($event, idx)" :loading="isNear(idx) ? 'eager' : 'lazy'" />
         <video
           v-if="isHls(v.url) ? idx === currentIdx : isNear(idx)"
           v-video-source="{ id: v.id, url: v.url }"
@@ -720,7 +720,7 @@ onUnmounted(() => {
         <div class="share-options secondary"><button v-for="name in ['生成海报','播放反馈','不感兴趣','作品举报']" :key="name" @click="preview=name"><i>{{name==='作品举报'?'!':name==='播放反馈'?'?':'◇'}}</i>{{name}}</button></div>
         <div v-if="preview" class="feature-preview"><strong>{{preview}}</strong><p>此功能暂未开放</p><button @click="preview=''">返回分享选项</button></div>
        </template>
-       <template v-else><div class="author-profile"><div class="profile-avatar"><AvatarContent :src="currentVideo.user?.avatar" :name="currentVideo.user?.name || currentVideo.user?.username"/></div><h2>{{currentVideo.user?.name || currentVideo.user?.username}}</h2><p>@{{currentVideo.user?.username}}</p><button class="follow-preview" @click="preview='关注作者'">＋ 关注</button><span v-if="preview==='关注作者'">关注功能暂未开放</span></div><h3 class="author-work-title">作品</h3><div class="author-works"><button v-for="item in videos.filter(item=>item.user?.id===currentVideo?.user?.id)" :key="item.id" @click="currentIdx=videos.indexOf(item);containerRef?.scrollTo({top:currentIdx*containerRef.clientHeight});panel=null"><img v-efv-cover-blob="mediaUrl(item.cover)" :alt="item.title"/><span>{{item.title}}</span></button></div></template>
+       <template v-else><div class="author-profile"><div class="profile-avatar"><AvatarContent :src="currentVideo.user?.avatar" :name="currentVideo.user?.name || currentVideo.user?.username"/></div><h2>{{currentVideo.user?.name || currentVideo.user?.username}}</h2><p>@{{currentVideo.user?.username}}</p><button class="follow-preview" @click="preview='关注作者'">＋ 关注</button><span v-if="preview==='关注作者'">关注功能暂未开放</span></div><h3 class="author-work-title">作品</h3><div class="author-works"><button v-for="item in videos.filter(item=>item.user?.id===currentVideo?.user?.id)" :key="item.id" @click="currentIdx=videos.indexOf(item);containerRef?.scrollTo({top:currentIdx*containerRef.clientHeight});panel=null"><img v-efv-cover-blob="mediaUrl(item.cover)" :data-cover-fallback="mediaUrl(item.cover_fallback) || undefined" :alt="item.title"/><span>{{item.title}}</span></button></div></template>
       </section>
     </div>
   </div>
