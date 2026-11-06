@@ -56,14 +56,14 @@ const slideDirection = ref(0)
 const dragDirection = ref(0)
 const dragOffset = ref(0)
 const releaseOffset = ref(0)
-const previewReady = computed(() => !!staged.value?.items.length && !pendingEntryCovers.value.size)
+const previewReady = computed(() => !!staged.value && (props.kind === 'long' || !!staged.value.items.length) && !pendingEntryCovers.value.size)
 const previewing = computed(() => dragDirection.value !== 0 && previewReady.value)
 const categoryOrder = computed(() => [null, ...categories.value.map(category => category.id)])
 let categoryTouch: { x: number; y: number; id: number } | undefined
 
 function startCategorySwipe(event: TouchEvent) {
   categoryTouch = undefined
-  if (loading.value || props.kind !== 'short' || playerIndex.value !== null || event.touches.length !== 1) return
+  if (loading.value || playerIndex.value !== null || event.touches.length !== 1) return
   const touch = event.touches[0]
   if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return
   categoryTouch = { x: touch.clientX, y: touch.clientY, id: touch.identifier }
@@ -109,7 +109,9 @@ function trackCategorySwipe(event: TouchEvent) {
     returnCovers.value = {}
     returnRatios.value = {}
     selected.value = category
-    void load()
+    if (props.kind === 'long') {
+      staged.value = { key: ++generation, items: [], coverIds: new Set(), more: false }
+    } else void load()
   }
   const width = scrollArea.value?.clientWidth ?? window.innerWidth
   dragOffset.value = dragDirection.value * Math.min(width, Math.max(0, -dx * dragDirection.value))
@@ -127,7 +129,10 @@ function endCategorySwipe(event: TouchEvent) {
   releaseOffset.value = previewing.value ? dragOffset.value : 0
   dragDirection.value = 0
   dragOffset.value = 0
-  if (staged.value && !pendingEntryCovers.value.size) showStagedGrid()
+  if (staged.value && !pendingEntryCovers.value.size) {
+    showStagedGrid()
+    if (props.kind === 'long') void load()
+  }
 }
 const videos = ref<(ShortVideo | Video)[]>([])
 const eagerCoverIds = ref(new Set<number>())
@@ -184,7 +189,7 @@ function showStagedGrid() {
   clearTimeout(entryCoverTimeout)
   videos.value = incoming.items
   eagerCoverIds.value = incoming.coverIds
-  slideDirection.value = incoming.items.length && displayedGrid.value !== 0
+  slideDirection.value = (props.kind === 'long' || (incoming.items.length && displayedGrid.value !== 0))
     ? Math.sign(categoryOrder.value.indexOf(selected.value) - categoryOrder.value.indexOf(displayedCategory.value))
     : 0
   displayedGrid.value = incoming.key
@@ -295,6 +300,10 @@ function selectCategory(category: number | null) {
   returnCovers.value = {}
   returnRatios.value = {}
   selected.value = category
+  if (props.kind === 'long') {
+    staged.value = { key: ++generation, items: [], coverIds: new Set(), more: false }
+    showStagedGrid()
+  }
   void load()
 }
 let playbackReturnPoster: HTMLImageElement | null = null
@@ -460,21 +469,18 @@ onMounted(() => {
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
     <CategoryStrip :categories="categories" :model-value="kind === 'short' ? displayedCategory : selected" @update:model-value="selectCategory" />
-    <div ref="scrollArea" class="discovery-scroll" :class="{ 'touch-pan-y overflow-x-hidden': kind === 'short' }"
+    <div ref="scrollArea" class="discovery-scroll touch-pan-y overflow-x-hidden"
       @touchstart.passive="startCategorySwipe" @touchmove.passive="trackCategorySwipe"
       @touchend.passive="endCategorySwipe" @touchcancel.passive="cancelCategorySwipe">
-      <div v-if="kind === 'long' && loading && !videos.length" class="video-grid" aria-busy="true" aria-label="正在加载视频"><div v-for="n in 6" :key="n" class="video-skeleton" /></div>
-      <TransitionGroup v-else tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
+      <TransitionGroup tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
         <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
           <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="kind === 'short' ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
+          <template v-if="kind === 'long' && !grid.items.length && (!query || error || loading)"><div v-for="n in 4" :key="'placeholder-' + n" class="video-skeleton" /></template>
         </div>
       </TransitionGroup>
       <div v-if="error && kind === 'short'" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
-      <div v-else-if="kind === 'long' && !loading && !visible.length && (!query || error)" class="video-grid" aria-label="长视频占位">
-        <div v-for="n in 4" :key="n" class="video-skeleton" />
-      </div>
-      <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
+      <div v-else-if="!loading && !visible.length && (kind === 'short' || (query && !error))" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
       <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
         <p v-if="loading" class="sr-only" role="status">加载中…</p>
         <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
