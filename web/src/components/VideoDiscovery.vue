@@ -5,6 +5,7 @@ import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
+import { portablePlaybackCover } from '@/utils/playback-cover'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
@@ -294,9 +295,48 @@ function closePlayer() {
 }
 const returnCovers = ref<Record<number, string>>({})
 const returnRatios = ref<Record<number, string>>({})
-function open(video: ShortVideo | Video, event: MouseEvent) {
+let openingPlayback = false
+async function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
+  if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    openingPlayback = true
+    const entry = crypto.randomUUID()
+    const viewportTop = scrollArea.value?.getBoundingClientRect().top ?? 0
+    const loaded = [...(scrollArea.value?.querySelectorAll<HTMLImageElement>('.video-grid:not(.invisible) img[data-video-cover]') ?? [])]
+      .filter(image => image.naturalWidth && image.naturalHeight)
+    const ratios = Object.fromEntries(loaded.map(image => [
+      image.dataset.videoCover, `${image.naturalWidth} / ${image.naturalHeight}`,
+    ]))
+    const nearby = loaded.sort((a, b) =>
+      Math.abs(a.getBoundingClientRect().top - viewportTop) - Math.abs(b.getBoundingClientRect().top - viewportTop),
+    ).slice(0, 6)
+    const snapshot = {
+      id: video.id, entry, items: visible.value, created: Date.now(),
+      discovery: { ratios, searching: searching.value, categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
+    }
+    const [cover, nearbyCovers] = await Promise.all([
+      portablePlaybackCover(poster),
+      Promise.all(nearby.map(async image => [image.dataset.videoCover, await portablePlaybackCover(image)])),
+    ])
+    if (disposed) return
+    try {
+      // The initial HTML can paint these bytes before loading the Vue bundle.
+      try {
+        sessionStorage.setItem('short-playback-feed', JSON.stringify({
+          ...snapshot, cover, returnCovers: Object.fromEntries(nearbyCovers.filter(([, source]) => source)),
+        }))
+      } catch {
+        sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
+      }
+      window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
+      return
+    } catch {
+      // Restricted/full storage must not open a document with a lost cover or return position.
+      openingPlayback = false
+    }
+  }
   playbackReturnPoster = poster
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
