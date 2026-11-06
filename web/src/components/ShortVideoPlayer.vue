@@ -77,8 +77,9 @@ function zoomBack() {
   zoomReturning.value = true
   const animation = player.animate([
     { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+    { transform: `translate3d(${x}px,${y}px,0) scale(${scale})`, opacity: 1, borderRadius: '16px', offset: .8 },
     { transform: `translate3d(${x}px,${y}px,0) scale(${scale})`, opacity: 0, borderRadius: '16px' },
-  ], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' })
+  ], { duration: 420, easing: 'ease-out', fill: 'forwards' })
   void animation.finished.then(closePlayer, closePlayer)
 }
 
