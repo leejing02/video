@@ -8,7 +8,7 @@ import { mediaUrl } from '@/utils/media-url'
 import { portablePlaybackCover } from '@/utils/playback-cover'
 import { captureReturnSnapshot, removeReturnReplica, RETURN_SNAPSHOT_KEY } from '@/utils/playback-return'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
-import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
+import type { ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
 import ShortVideoPlayer from './ShortVideoPlayer.vue'
@@ -33,7 +33,15 @@ onUnmounted(() => masonryObserver.disconnect())
 const props = defineProps<{ kind: 'short' | 'long' }>()
 const router = useRouter()
 const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
-const categories = ref<(Category | ShortCategory)[]>([])
+const shortCategories = [
+  { id: 8, name: '国产', cover: '/category-icons/domestic.jpg' },
+  { id: 9, name: '精选', cover: '/category-icons/selected.jpg' },
+  { id: 11, name: '抖舞', cover: '/category-icons/dance.jpg' },
+  { id: 10, name: '猎奇', cover: '/category-icons/curiosity.jpg' },
+]
+const categories = ref<{ id: number; name: string; cover: string | null }[]>(
+  props.kind === 'short' ? shortCategories : [],
+)
 const selected = ref<number | null>(null)
 const displayedCategory = ref<number | null>(null)
 const slideDirection = ref(0)
@@ -349,7 +357,7 @@ function restorePlaybackList() {
     sessionStorage.removeItem('short-playback-feed')
     const state = saved.discovery
     if (!Array.isArray(state?.items) || !state.items.length) return false
-    if (Array.isArray(state.categories)) categories.value = state.categories
+    if (state.category != null && !shortCategories.some(category => category.id === state.category)) return false
     returnCovers.value = saved.returnCovers ?? {}
     returnRatios.value = state.ratios ?? {}
     searching.value = !!state.searching
@@ -399,17 +407,18 @@ async function hideReturnReplica() {
 onMounted(() => {
   const restored = restorePlaybackList()
   if (!restored) removeReturnReplica()
-  if (restored && categories.value.length) return
   if (!videos.value.length) void load()
-  const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
-  void request.then(async result => {
-    if (disposed) return
-    const items = Array.isArray(result) ? result : result.data ?? []
-    categories.value = items
-    if (props.kind !== 'short') return
-    for (let index = 0; index < items.length && !disposed && !document.hidden; index += 2) {
-      await Promise.all(items.slice(index, index + 2).map(category => warmShortFeed(category.id)))
-    }
+  if (props.kind === 'short') {
+    if (restored) return
+    void (async () => {
+      for (let index = 0; index < shortCategories.length && !disposed && !document.hidden; index += 2) {
+        await Promise.all(shortCategories.slice(index, index + 2).map(category => warmShortFeed(category.id)))
+      }
+    })()
+    return
+  }
+  void categoryApi.list('long').then(result => {
+    if (!disposed) categories.value = Array.isArray(result) ? result : result.data ?? []
   }).catch(() => {})
 })
 </script>
