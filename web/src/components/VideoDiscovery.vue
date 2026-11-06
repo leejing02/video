@@ -300,15 +300,15 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
     openingPlayback = true
     const entry = crypto.randomUUID()
     const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(),
-      discovery: { items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
+      id: video.id, entry, items: visible.value, created: Date.now(), returnInHistory: true,
+      discovery: { categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
     }
     const cover = await portablePlaybackCover(poster)
     if (disposed) return
     try {
       // The initial HTML can paint these bytes before loading the Vue bundle.
       sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
-      window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
+      window.location.assign(`/player.html?id=${video.id}&entry=${entry}`)
       return
     } catch {
       // Restricted/full storage must not open a document with a lost cover or return position.
@@ -328,7 +328,8 @@ function restorePlaybackList() {
     if (!saved?.returning) return false
     sessionStorage.removeItem('short-playback-feed')
     const state = saved.discovery
-    if (Date.now() - saved.created > 300000 || !Array.isArray(state?.items) || !state.items.length) return false
+    if (!Array.isArray(state?.items) || !state.items.length) return false
+    if (Array.isArray(state.categories)) categories.value = state.categories
     videos.value = state.items
     selected.value = displayedCategory.value = state.category ?? null
     page.value = Math.max(1, Number(state.page) || 1)
@@ -355,9 +356,19 @@ function restorePlaybackList() {
     return true
   } catch { return false }
 }
+function resumeDiscovery(event: PageTransitionEvent) {
+  if (!event.persisted || props.kind !== 'short') return
+  openingPlayback = false
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+    if (saved?.returning) sessionStorage.removeItem('short-playback-feed')
+  } catch { /* The live list is already available. */ }
+}
+onUnmounted(() => window.removeEventListener('pageshow', resumeDiscovery))
 onMounted(() => {
   document.addEventListener('visibilitychange', restoreDiscovery)
   window.addEventListener('pageshow', restoreCachedDiscovery)
+  window.addEventListener('pageshow', resumeDiscovery)
   if (!restorePlaybackList()) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
   void request.then(async result => {

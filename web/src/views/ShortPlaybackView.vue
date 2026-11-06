@@ -15,7 +15,14 @@ const id = Number(route.query.id)
 function close() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
-    if (saved?.id === id) sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...saved, returning: true }))
+    if (saved?.id === id && saved.entry === route.query.entry) {
+      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...saved, returning: true }))
+      const source = new URL(document.referrer || location.href)
+      if (saved.returnInHistory && source.origin === location.origin && source.pathname === '/short' && history.length > 1) {
+        history.back()
+        return
+      }
+    }
   } catch { /* Returning to the list does not require session storage. */ }
   location.replace('/short')
 }
@@ -32,7 +39,7 @@ async function load() {
       location.replace('/short')
       return
     }
-    if (saved?.id === id && Date.now() - saved.created < 300000 && Array.isArray(saved.items)) {
+    if (saved?.id === id && saved.entry === route.query.entry && Array.isArray(saved.items)) {
       const index = saved.items.findIndex((video: ShortVideo) => video.id === id)
       if (index >= 0) {
         initialIndex.value = index
