@@ -30,11 +30,6 @@ function close() {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
     if (saved?.id === id && saved.entry === route.query.entry) {
       sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...saved, returning: true }))
-      const source = new URL(document.referrer || location.href)
-      if (saved.returnInHistory && source.origin === location.origin && source.pathname === '/short' && history.length > 1) {
-        history.back()
-        return
-      }
     }
   } catch { /* Returning to the list does not require session storage. */ }
   location.replace('/short')

@@ -300,7 +300,7 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
     openingPlayback = true
     const entry = crypto.randomUUID()
     const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(), returnInHistory: true,
+      id: video.id, entry, items: visible.value, created: Date.now(),
       discovery: { categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
     }
     const cover = await portablePlaybackCover(poster)
@@ -308,7 +308,7 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
     try {
       // The initial HTML can paint these bytes before loading the Vue bundle.
       sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
-      window.location.assign(`/player.html?id=${video.id}&entry=${entry}`)
+      window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
       return
     } catch {
       // Restricted/full storage must not open a document with a lost cover or return position.
@@ -365,20 +365,9 @@ function restorePlaybackList() {
     return true
   } catch { return false }
 }
-function resumeDiscovery(event: PageTransitionEvent) {
-  if (!event.persisted || props.kind !== 'short') return
-  openingPlayback = false
-  try {
-    const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
-    applyPlaybackLikes(saved?.updatedLikes)
-    if (saved?.returning) sessionStorage.removeItem('short-playback-feed')
-  } catch { /* The live list is already available. */ }
-}
-onUnmounted(() => window.removeEventListener('pageshow', resumeDiscovery))
 onMounted(() => {
   document.addEventListener('visibilitychange', restoreDiscovery)
   window.addEventListener('pageshow', restoreCachedDiscovery)
-  window.addEventListener('pageshow', resumeDiscovery)
   if (!restorePlaybackList()) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
   void request.then(async result => {
