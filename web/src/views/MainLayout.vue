@@ -24,7 +24,7 @@ function isActive(name: string) {
 <template>
   <div class="app-shell" :class="{ 'chat-mode': route.name === 'chat' }">
     <main class="app-content"><RouterView /></main>
-    <nav v-if="!navigationHidden" class="bottom-nav" aria-label="主导航">
+    <nav v-if="!navigationHidden || route.name === 'short'" :inert="navigationHidden || undefined" class="bottom-nav" aria-label="主导航">
       <button v-for="tab in tabs" :key="tab.name" :class="['tab-btn', { active: isActive(tab.name), 'tab-publish': tab.name === 'upload' }]" :aria-current="isActive(tab.name) ? 'page' : undefined" :aria-label="tab.label" @click="router.replace({ name: tab.name })">
         <svg v-if="tab.name === 'upload'" class="publish-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" /><path d="M24 15v18M15 24h18" /></svg>
         <span v-else>{{ tab.label }}</span>

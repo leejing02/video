@@ -5,7 +5,6 @@ import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
-import { portablePlaybackCover } from '@/utils/playback-cover'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
@@ -285,60 +284,14 @@ function selectCategory(category: number | null) {
   selected.value = category
   void load()
 }
-let listScrollTop = 0
-const listViewportHeight = ref(0)
 function closePlayer() {
   playerIndex.value = null
-  void nextTick(() => {
-    if (scrollArea.value) scrollArea.value.scrollTop = listScrollTop
-  })
 }
 const returnCovers = ref<Record<number, string>>({})
 const returnRatios = ref<Record<number, string>>({})
-let openingPlayback = false
-async function open(video: ShortVideo | Video, event: MouseEvent) {
+function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
-  if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-    openingPlayback = true
-    const entry = crypto.randomUUID()
-    const viewportTop = scrollArea.value?.getBoundingClientRect().top ?? 0
-    const loaded = [...(scrollArea.value?.querySelectorAll<HTMLImageElement>('.video-grid:not(.invisible) img[data-video-cover]') ?? [])]
-      .filter(image => image.naturalWidth && image.naturalHeight)
-    const ratios = Object.fromEntries(loaded.map(image => [
-      image.dataset.videoCover, `${image.naturalWidth} / ${image.naturalHeight}`,
-    ]))
-    const nearby = loaded.sort((a, b) =>
-      Math.abs(a.getBoundingClientRect().top - viewportTop) - Math.abs(b.getBoundingClientRect().top - viewportTop),
-    ).slice(0, 6)
-    const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(),
-      discovery: { ratios, searching: searching.value, categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
-    }
-    const [cover, nearbyCovers] = await Promise.all([
-      portablePlaybackCover(poster),
-      Promise.all(nearby.map(async image => [image.dataset.videoCover, await portablePlaybackCover(image)])),
-    ])
-    if (disposed) return
-    try {
-      // The initial HTML can paint these bytes before loading the Vue bundle.
-      try {
-        sessionStorage.setItem('short-playback-feed', JSON.stringify({
-          ...snapshot, cover, returnCovers: Object.fromEntries(nearbyCovers.filter(([, source]) => source)),
-        }))
-      } catch {
-        sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
-      }
-      window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
-      return
-    } catch {
-      // Restricted/full storage must not open a document with a lost cover or return position.
-      openingPlayback = false
-    }
-  }
-  listScrollTop = scrollArea.value?.scrollTop ?? 0
-  listViewportHeight.value = scrollArea.value?.closest('.discovery-browse')?.clientHeight ?? 0
   playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
@@ -410,7 +363,7 @@ onMounted(() => {
 
 <template>
   <section class="discovery-page" :aria-label="kind === 'short' ? '短视频发现' : '长视频发现'">
-    <div class="discovery-browse" :style="{ height: playerIndex !== null ? listViewportHeight + 'px' : undefined }" :inert="playerIndex !== null || undefined">
+    <div class="discovery-browse" :inert="playerIndex !== null || undefined">
     <header class="discovery-header">
       <button class="feed-icon" aria-label="打开我的页面" @click="router.push('/me')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
       <nav class="feed-tabs" aria-label="视频频道">
