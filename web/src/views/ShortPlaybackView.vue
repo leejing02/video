@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import ShortVideoPlayer from '@/components/ShortVideoPlayer.vue'
 import { shortVideoApi } from '@/api/shortVideo'
 import type { ShortVideo } from '@/types/models'
+import { fadeReturnDim, readReturnSnapshot, renderReturnSnapshot, replicaCardRect, RETURN_SNAPSHOT_KEY, type ReturnSnapshot } from '@/utils/playback-return'
 
 const route = useRoute()
 const items = ref<ShortVideo[]>([])
@@ -25,11 +26,36 @@ function saveLikes(id: number, count: number) {
   } catch { /* The player still shows the confirmed count. */ }
 }
 
+// The list captured when playback opened, drawn under the player so the back
+// animation shrinks the video into its card instead of fading to black.
+let returnLayer: HTMLElement | undefined
+let returnSnapshot: ReturnSnapshot | null = null
+let returnTop: number | undefined
+async function prepareReturnLayer(covers: Record<string, string>) {
+  returnSnapshot = readReturnSnapshot(typeof route.query.entry === 'string' ? route.query.entry : null)
+  const app = document.getElementById('app')
+  if (!returnSnapshot || !app) return
+  try { returnLayer = await renderReturnSnapshot(returnSnapshot, covers, app) } catch { returnLayer = undefined }
+}
+function returnTarget(videoId?: number) {
+  if (!returnLayer?.isConnected) return undefined
+  const { rect, top } = replicaCardRect(returnLayer, videoId)
+  returnTop = top
+  // Same duration as the player's shrink animation (ShortVideoPlayer zoomBack).
+  fadeReturnDim(returnLayer, 420)
+  return rect
+}
+
 function close() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
     if (saved?.id === id && saved.entry === route.query.entry) {
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...saved, returning: true }))
+      // Restore the list where the return animation ended.
+      const discovery = returnTop === undefined ? saved.discovery : { ...saved.discovery, top: returnTop }
+      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...saved, discovery, returning: true }))
+      if (returnSnapshot && returnTop !== undefined) {
+        sessionStorage.setItem(RETURN_SNAPSHOT_KEY, JSON.stringify({ ...returnSnapshot, top: returnTop }))
+      }
     }
   } catch { /* Returning to the list does not require session storage. */ }
   location.replace('/short')
@@ -53,6 +79,7 @@ async function load() {
         initialIndex.value = index
         initialCover.value = typeof saved.cover === 'string' && !saved.cover.startsWith('blob:') ? saved.cover : ''
         items.value = saved.items
+        void prepareReturnLayer({ ...saved.returnCovers })
         return
       }
     }
@@ -72,12 +99,12 @@ function onPageShow(event: PageTransitionEvent) {
   } catch { location.replace('/short') }
 }
 onMounted(() => { window.addEventListener('pageshow', onPageShow); void load() })
-onUnmounted(() => window.removeEventListener('pageshow', onPageShow))
+onUnmounted(() => { window.removeEventListener('pageshow', onPageShow); returnLayer?.remove() })
 </script>
 
 <template>
   <div class="h-full bg-black text-white">
-    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" :initial-cover="initialCover" @likes-changed="saveLikes" @close="close" />
+    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" :initial-cover="initialCover" :return-target="returnTarget" @likes-changed="saveLikes" @close="close" />
     <div v-else class="flex h-full flex-col items-center justify-center gap-4" role="status">
       <span>{{ error || '正在加载视频…' }}</span>
       <button v-if="error" @click="load">重试</button>

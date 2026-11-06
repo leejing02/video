@@ -6,6 +6,7 @@ import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
 import { portablePlaybackCover } from '@/utils/playback-cover'
+import { captureReturnSnapshot, removeReturnReplica, RETURN_SNAPSHOT_KEY } from '@/utils/playback-return'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
 import type { Category, ShortCategory, ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
@@ -296,6 +297,10 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
       id: video.id, entry, items: visible.value, created: Date.now(),
       discovery: { ratios, searching: searching.value, categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
     }
+    // A static copy of this screen lets the player shrink back into its card and
+    // index.html repaint the list before Vue starts (no black or white flash).
+    const app = document.getElementById('app')
+    const returnSnapshot = app ? captureReturnSnapshot(app, entry, ratios as Record<string, string>) : null
     const [cover, nearbyCovers] = await Promise.all([
       portablePlaybackCover(poster),
       Promise.all(nearby.map(async image => [image.dataset.videoCover, await portablePlaybackCover(image)])),
@@ -309,6 +314,12 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
         }))
       } catch {
         sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
+      }
+      try {
+        if (returnSnapshot) sessionStorage.setItem(RETURN_SNAPSHOT_KEY, JSON.stringify(returnSnapshot))
+        else sessionStorage.removeItem(RETURN_SNAPSHOT_KEY)
+      } catch {
+        sessionStorage.removeItem(RETURN_SNAPSHOT_KEY)
       }
       window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
       return
@@ -358,6 +369,7 @@ function restorePlaybackList() {
     }
     void nextTick(() => {
       restoreScroll()
+      void hideReturnReplica()
       scrollArea.value?.addEventListener('load', restoreScroll, { capture: true })
       const stop = () => {
         pending = false
@@ -369,8 +381,25 @@ function restorePlaybackList() {
     return true
   } catch { return false }
 }
+// index.html paints the captured list on return; drop it once the real list shows
+// the same screen (visible covers decoded), or after a short limit.
+async function hideReturnReplica() {
+  sessionStorage.removeItem(RETURN_SNAPSHOT_KEY)
+  const until = performance.now() + 1500
+  while (!disposed && performance.now() < until) {
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    const view = scrollArea.value?.getBoundingClientRect()
+    const pending = view && [...scrollArea.value!.querySelectorAll<HTMLElement>('.video-grid:not(.invisible) .video-tile.invisible')]
+      .some(tile => { const r = tile.getBoundingClientRect(); return r.bottom > view.top && r.top < view.bottom })
+    if (view && !pending) break
+  }
+  await new Promise(resolve => requestAnimationFrame(resolve))
+  removeReturnReplica()
+}
 onMounted(() => {
-  if (restorePlaybackList() && categories.value.length) return
+  const restored = restorePlaybackList()
+  if (!restored) removeReturnReplica()
+  if (restored && categories.value.length) return
   if (!videos.value.length) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
   void request.then(async result => {

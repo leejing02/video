@@ -15,7 +15,7 @@ import { playbackCoverWindow } from '@/utils/playback-window'
 import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
-const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string; returnTarget?: () => DOMRect | undefined }>()
+const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string; returnTarget?: (id?: number) => DOMRect | undefined }>()
 const emit = defineEmits<{ close: []; likesChanged: [id: number, count: number] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
@@ -66,7 +66,7 @@ function zoomBack() {
   if (!player?.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return closePlayer()
 
   const bounds = player.getBoundingClientRect()
-  const target = props.returnTarget?.()
+  const target = props.returnTarget?.(videos.value[currentIdx.value]?.id)
   const visibleTarget = target && target.width > 0 && target.height > 0 &&
     target.bottom > bounds.top && target.top < bounds.bottom
   const scale = visibleTarget ? Math.min(target.width / bounds.width, target.height / bounds.height, .85) : .88
