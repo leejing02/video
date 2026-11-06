@@ -477,7 +477,7 @@ onMounted(() => {
     <header class="discovery-header">
       <button class="feed-icon" aria-label="打开我的页面" @click="router.push('/me')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
       <nav class="feed-tabs" aria-label="视频频道">
-        <button class="selected" aria-current="page">长视频</button>
+        <button class="selected" aria-current="page">短视频</button>
       </nav>
       <button class="feed-icon" :aria-expanded="searching" aria-label="搜索视频" @click="searching = !searching"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7.5" /><path d="m16 16 5 5" /></svg></button>
     </header>
