@@ -16,7 +16,7 @@ import type { ShortVideo, ShortVideoComment } from '@/types/models'
 
 const auth = useAuthStore()
 const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCover?: string }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; likesChanged: [id: number, count: number] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
@@ -455,6 +455,7 @@ async function like(id: number) {
     states.value[id] = { ...states.value[id], liked: res.liked }
     const item = videos.value.find(v => v.id === id)
     if (item) item.likes = res.count
+    emit('likesChanged', id, res.count)
   } catch {
     showToast('点赞失败，请重试')
   } finally {

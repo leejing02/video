@@ -12,6 +12,19 @@ const initialCover = ref('')
 const error = ref('')
 const id = Number(route.query.id)
 
+function saveLikes(id: number, count: number) {
+  if (!route.query.entry) return
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+    if (saved?.entry !== route.query.entry || saved.returning) return
+    const item = saved.items.find((video: ShortVideo) => video.id === id)
+    if (item) item.likes = count
+    sessionStorage.setItem('short-playback-feed', JSON.stringify({
+      ...saved, updatedLikes: { ...saved.updatedLikes, [id]: count },
+    }))
+  } catch { /* The player still shows the confirmed count. */ }
+}
+
 function close() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
@@ -69,7 +82,7 @@ onUnmounted(() => window.removeEventListener('pageshow', onPageShow))
 
 <template>
   <div class="h-full bg-black text-white">
-    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" :initial-cover="initialCover" @close="close" />
+    <ShortVideoPlayer v-if="items.length" :items="items" :initial-index="initialIndex" :initial-cover="initialCover" @likes-changed="saveLikes" @close="close" />
     <div v-else class="flex h-full flex-col items-center justify-center gap-4" role="status">
       <span>{{ error || '正在加载视频…' }}</span>
       <button v-if="error" @click="load">重试</button>

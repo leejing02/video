@@ -321,6 +321,14 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
   playerItems.value = visible.value as ShortVideo[]
   playerIndex.value = visible.value.findIndex(v => v.id === video.id)
 }
+function applyPlaybackLikes(counts: Record<number, number> | undefined) {
+  if (!counts) return
+  for (const video of videos.value) {
+    const count = counts[video.id]
+    if (typeof count === 'number') video.likes = count
+  }
+}
+
 function restorePlaybackList() {
   if (props.kind !== 'short') return false
   try {
@@ -331,6 +339,7 @@ function restorePlaybackList() {
     if (!Array.isArray(state?.items) || !state.items.length) return false
     if (Array.isArray(state.categories)) categories.value = state.categories
     videos.value = state.items
+    applyPlaybackLikes(saved.updatedLikes)
     selected.value = displayedCategory.value = state.category ?? null
     page.value = Math.max(1, Number(state.page) || 1)
     more.value = !!state.more
@@ -361,6 +370,7 @@ function resumeDiscovery(event: PageTransitionEvent) {
   openingPlayback = false
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+    applyPlaybackLikes(saved?.updatedLikes)
     if (saved?.returning) sessionStorage.removeItem('short-playback-feed')
   } catch { /* The live list is already available. */ }
 }
