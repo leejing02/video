@@ -44,22 +44,6 @@ const previewing = computed(() => dragDirection.value !== 0 && previewReady.valu
 const categoryOrder = computed(() => [null, ...categories.value.map(category => category.id)])
 let categoryTouch: { x: number; y: number; id: number } | undefined
 
-function restoreDiscovery() {
-  if (document.hidden) return
-  categoryTouch = undefined
-  dragDirection.value = 0
-  dragOffset.value = 0
-  releaseOffset.value = 0
-  clearTimeout(entryCoverTimeout)
-  generation++
-  staged.value = undefined
-  pendingEntryCovers.value.clear()
-  loading.value = false
-  selected.value = displayedCategory.value
-  if (!videos.value.length) void load()
-}
-function restoreCachedDiscovery(event: PageTransitionEvent) { if (event.persisted) restoreDiscovery() }
-
 function startCategorySwipe(event: TouchEvent) {
   categoryTouch = undefined
   if (loading.value || props.kind !== 'short' || playerIndex.value !== null || event.touches.length !== 1) return
@@ -105,6 +89,8 @@ function trackCategorySwipe(event: TouchEvent) {
     const category = categoryOrder.value[categoryOrder.value.indexOf(displayedCategory.value) + direction]
     if (category === undefined) return
     dragDirection.value = direction
+    returnCovers.value = {}
+    returnRatios.value = {}
     selected.value = category
     void load()
   }
@@ -144,8 +130,6 @@ const playerCover = ref('')
 watch(playerIndex, index => { navigationHidden.value = index !== null }, { flush: 'sync' })
 onUnmounted(() => {
   disposed = true
-  document.removeEventListener('visibilitychange', restoreDiscovery)
-  window.removeEventListener('pageshow', restoreCachedDiscovery)
   generation++
   clearTimeout(entryCoverTimeout)
   navigationHidden.value = false
@@ -242,10 +226,6 @@ async function load(append = false) {
         if (pendingEntryCovers.value.size) {
           entryCoverTimeout = setTimeout(() => {
             if (!visible.value.length) {
-              categoryTouch = undefined
-              dragDirection.value = 0
-              dragOffset.value = 0
-              releaseOffset.value = 0
               showStagedGrid()
               return
             }
@@ -390,8 +370,6 @@ function restorePlaybackList() {
   } catch { return false }
 }
 onMounted(() => {
-  document.addEventListener('visibilitychange', restoreDiscovery)
-  window.addEventListener('pageshow', restoreCachedDiscovery)
   if (restorePlaybackList() && categories.value.length) return
   if (!videos.value.length) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
