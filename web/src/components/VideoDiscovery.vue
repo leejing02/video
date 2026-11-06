@@ -39,9 +39,17 @@ const shortCategories = [
   { id: 11, name: '抖舞', cover: '/category-icons/dance.jpg' },
   { id: 10, name: '猎奇', cover: '/category-icons/curiosity.jpg' },
 ]
-const categories = ref<{ id: number; name: string; cover: string | null }[]>(
-  props.kind === 'short' ? shortCategories : [],
-)
+const categories = ref<{ id: number; name: string; cover: string | null }[]>(shortCategories)
+let longCategoryRequest: ReturnType<typeof categoryApi.list> | undefined
+function loadLongCategories() {
+  if (!longCategoryRequest) {
+    longCategoryRequest = categoryApi.list('long').catch(error => {
+      longCategoryRequest = undefined
+      throw error
+    })
+  }
+  return longCategoryRequest
+}
 const selected = ref<number | null>(null)
 const displayedCategory = ref<number | null>(null)
 const slideDirection = ref(0)
@@ -217,7 +225,22 @@ async function load(append = false) {
   }
   const nextPage = append ? page.value + 1 : 1
   try {
-    const params = { category_id: selected.value ?? undefined, page: nextPage, per_page: 30 }
+    let categoryId = selected.value ?? undefined
+    if (props.kind === 'long' && categoryId !== undefined) {
+      const selectedName = shortCategories.find(category => category.id === categoryId)?.name
+      const response = await loadLongCategories()
+      if (request !== generation) return
+      const longCategories = Array.isArray(response) ? response : response.data ?? []
+      const matchedCategory = longCategories.find(category => category.name === selectedName)
+      if (!matchedCategory) {
+        videos.value = []
+        page.value = 1
+        more.value = false
+        return
+      }
+      categoryId = matchedCategory.id
+    }
+    const params = { category_id: categoryId, page: nextPage, per_page: 30 }
     const result = await (props.kind === 'long'
       ? videoApi.list({ ...params, type: 'long' })
       : !append
@@ -417,9 +440,7 @@ onMounted(() => {
     })()
     return
   }
-  void categoryApi.list('long').then(result => {
-    if (!disposed) categories.value = Array.isArray(result) ? result : result.data ?? []
-  }).catch(() => {})
+  void loadLongCategories().catch(() => {})
 })
 </script>
 
@@ -450,6 +471,9 @@ onMounted(() => {
         </div>
       </TransitionGroup>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
+      <div v-else-if="kind === 'long' && !loading && !visible.length && !query" class="video-grid" aria-label="暂无长视频">
+        <div v-for="n in 4" :key="n" class="video-skeleton" />
+      </div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
       <div v-if="kind === 'short' && autoLoad && more && !error && !query && playerIndex === null">
         <p v-if="loading" class="sr-only" role="status">加载中…</p>
