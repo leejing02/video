@@ -124,6 +124,18 @@ function endBackSwipe(event: TouchEvent) {
 }
 
 function merge(id: number, incoming: Message[], history = false) {
+function groupCacheKey() {
+  const user = auth.user?.id
+  return user ? `chat:recent-groups:v1:${user}` : ''
+}
+
+function readGroupCache(key: string): { id: number; messages: Message[] }[] {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) || '[]')
+    return Array.isArray(saved) ? saved : []
+  } catch { return [] }
+}
+
   const values = new Map((cache.value[id] ?? []).map(item => [item.id, item]))
   for (const item of incoming) if (item.chat_room_id === id) values.set(item.id, item)
   const sorted = [...values.values()].sort((a, b) => a.id - b.id)
@@ -132,6 +144,13 @@ function merge(id: number, incoming: Message[], history = false) {
   const limit = active ? (!history && nearBottom ? 500 : 0) : 200
   cache.value[id] = limit ? sorted.slice(-limit) : sorted
   if (limit && sorted.length > limit) exhausted.value[id] = false
+  const key = groupCacheKey()
+  const group = rooms.value.find(item => item.id === id)
+  if (!key || !group || group.kind === 'direct') return
+  try {
+    const previous = readGroupCache(key).filter(item => item.id !== id).slice(0, 9)
+    sessionStorage.setItem(key, JSON.stringify([{ id, messages: cache.value[id].slice(-100) }, ...previous]))
+  } catch { /* The mounted conversation can still use its in-memory messages. */ }
 }
 function bottom() { scrollEl.value?.scrollTo({ top: scrollEl.value.scrollHeight }) }
 async function refreshRooms() {
@@ -164,6 +183,16 @@ async function selectRoom(item: ChatRoom) {
   try {
     if (item.kind === 'group') await chatApi.join(item.id)
     if (version !== selectionVersion || disposed) return
+    const key = groupCacheKey()
+    if (key && item.kind !== 'direct' && !cache.value[item.id]?.length) {
+      const saved = readGroupCache(key).find(entry => entry.id === item.id)?.messages
+      if (Array.isArray(saved)) {
+        merge(item.id, saved)
+        await nextTick()
+        if (version !== selectionVersion || disposed) return
+        bottom()
+      }
+    }
     const previous = cache.value[item.id]?.slice(-1)[0]?.id
     const page = await chatApi.messages(item.id, undefined, 50)
     merge(item.id, page)
@@ -173,7 +202,12 @@ async function selectRoom(item: ChatRoom) {
     // A refresh can overlap a websocket delivery; merging preserves both.
     await nextTick(); bottom()
     await markRead(item.id)
-  } catch (e: any) { if (version === selectionVersion) error.value = e.response?.data?.error || '无法加载会话，请重试' }
+  } catch (e: any) {
+    if (version === selectionVersion) {
+      if ([401, 403, 404].includes(e.response?.status)) delete cache.value[item.id]
+      error.value = e.response?.data?.error || '无法加载会话，请重试'
+    }
+  }
   finally { if (version === selectionVersion) loading.value = false }
 }
 async function older() {

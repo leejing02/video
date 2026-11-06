@@ -61,8 +61,8 @@ func (h *ChatHandler) Messages(c *gin.Context) {
 	}
 	var msgs []models.ChatMessageWithUser
 	var err error
-	if hasAfter {
-		msgs, err = h.Chat.MessagesAfter(roomID, afterID, limit)
+	if hasAfter || beforeID <= 0 {
+		msgs, err = h.Chat.RecentMessages(c.Request.Context(), roomID, afterID, limit, hasAfter)
 	} else {
 		msgs, err = h.Chat.Messages(roomID, beforeID, limit)
 	}

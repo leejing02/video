@@ -44,6 +44,7 @@ func main() {
 		client := videocache.NewRedis(addr, os.Getenv("VIDEO_CACHE_REDIS_PASSWORD"), redisDB)
 		defer client.Close()
 		remote = client
+		chatRepo.MessageCache = client
 	}
 	if os.Getenv("VIDEO_CACHE_ENABLED") != "false" {
 		cacheDir := os.Getenv("VIDEO_CACHE_DIR")

@@ -1,14 +1,62 @@
 package repos
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/yourname/video-api/internal/models"
+	"github.com/yourname/video-api/internal/videocache"
 )
 
-type ChatRepo struct{ DB *sqlx.DB }
+type ChatRepo struct {
+	DB           *sqlx.DB
+	MessageCache *videocache.Redis
+}
+
+const chatCacheTTL = 30 * time.Second
+
+func chatCacheKey(roomID int64) string {
+	return "chat:recent:v1:" + strconv.FormatInt(roomID, 10)
+}
+
+func (r *ChatRepo) RecentMessages(ctx context.Context, roomID, afterID int64, limit int, forward bool) ([]models.ChatMessageWithUser, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	if r.MessageCache != nil {
+		var loadErr error
+		data, err := r.MessageCache.Fill(ctx, chatCacheKey(roomID), chatCacheTTL, func() ([]byte, error) {
+			rows, err := r.Messages(roomID, 0, 100)
+			loadErr = err
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(rows)
+		})
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		var rows []models.ChatMessageWithUser
+		if err == nil && json.Unmarshal(data, &rows) == nil {
+			if !forward {
+				return rows[max(0, len(rows)-limit):], nil
+			}
+			if len(rows) < 100 || afterID >= rows[0].ID {
+				start := 0
+				for start < len(rows) && rows[start].ID <= afterID {
+					start++
+				}
+				return rows[start:min(start+limit, len(rows))], nil
+			}
+		}
+	}
+	return r.messages(roomID, 0, afterID, limit, forward)
+}
 
 func NewChatRepo(db *sqlx.DB) *ChatRepo { return &ChatRepo{DB: db} }
 
@@ -158,7 +206,16 @@ func (r *ChatRepo) CreateMessage(m *models.ChatMessage) error {
 	if _, err := tx.Exec(`UPDATE chat_rooms SET last_message_at = NOW() WHERE id = ?`, m.ChatRoomID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if r.MessageCache != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		defer cancel()
+		// A tombstone also invalidates a concurrent fill that started on a missing key.
+		_ = r.MessageCache.Set(ctx, chatCacheKey(m.ChatRoomID), []byte{}, chatCacheTTL)
+	}
+	return nil
 }
 
 // LoadMessageWithUser 拼装单条消息（广播用）
