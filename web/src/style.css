@@ -146,6 +146,8 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .video-poster { position: relative; aspect-ratio: 3/5; overflow: hidden; background: #e9e9e9; }
 .video-poster>img { width: 100%; height: 100%; object-fit: cover; }
 .video-tile.landscape .video-poster { aspect-ratio: 16/10; }
+.discovery-page .long-grid .video-poster:has(> img) { aspect-ratio: auto; }
+.discovery-page .long-grid .video-poster > img { display: block; width: 100%; height: auto; }
 .poster-fallback { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #777; font-size: 12px; }
 .poster-fallback svg { width: 44px; height: 44px; fill: none; stroke: #999; stroke-width: 1.5; }
 .video-grid.short-masonry { grid-auto-rows: 2px; row-gap: 0; }
