@@ -470,8 +470,8 @@ onMounted(() => {
           <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="kind === 'short' ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
         </div>
       </TransitionGroup>
-      <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
-      <div v-else-if="kind === 'long' && !loading && !visible.length && !query" class="video-grid" aria-label="暂无长视频">
+      <div v-if="error && kind === 'short'" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
+      <div v-else-if="kind === 'long' && !loading && !visible.length && (!query || error)" class="video-grid" aria-label="长视频占位">
         <div v-for="n in 4" :key="n" class="video-skeleton" />
       </div>
       <div v-else-if="!loading && !visible.length" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
