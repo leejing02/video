@@ -151,6 +151,8 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .poster-fallback { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #777; font-size: 12px; }
 .poster-fallback svg { width: 44px; height: 44px; fill: none; stroke: #999; stroke-width: 1.5; }
 .video-grid.short-masonry { grid-auto-rows: 2px; row-gap: 0; }
+.discovery-page .long-grid.short-masonry { grid-auto-flow: row dense; }
+.discovery-page .long-grid.short-masonry > .video-skeleton { grid-row: span 150; }
 /* Column width is fixed; the cover keeps its own ratio, so height follows the image
    (no crop, no fixed box). 3/5 only reserves space until the image has loaded. */
 .short-masonry .video-poster:has(> img) { aspect-ratio: auto; }
