@@ -37,8 +37,19 @@ async function prepareReturnLayer(covers: Record<string, string>) {
   if (!returnSnapshot || !app) return
   try { returnLayer = await renderReturnSnapshot(returnSnapshot, covers, app) } catch { returnLayer = undefined }
 }
+// player.html keeps a black strip at the top edge for iOS 26 Safari's status bar.
+// Safari re-samples only when that element is replaced, so swap in a new strip
+// when leaving playback: the status bar turns white with the list, not after it.
+function tintStatusBar(color: string) {
+  const strip = document.getElementById('playback-status-tint')
+  if (!strip || strip.style.backgroundColor === color) return
+  const next = strip.cloneNode() as HTMLElement
+  next.style.backgroundColor = color
+  strip.replaceWith(next)
+}
 function returnTarget(videoId?: number) {
   if (!returnLayer?.isConnected) return undefined
+  tintStatusBar('#ffffff')
   const { rect, top } = replicaCardRect(returnLayer, videoId)
   returnTop = top
   // Same duration as the player's shrink animation (ShortVideoPlayer zoomBack).
@@ -58,6 +69,7 @@ function close() {
       }
     }
   } catch { /* Returning to the list does not require session storage. */ }
+  tintStatusBar('#ffffff')
   location.replace('/short')
 }
 

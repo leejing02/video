@@ -10,6 +10,12 @@
     html, body { margin: 0; width: 100%; height: 100%; background-color: #000000; color-scheme: dark; }
     #playback-entry-cover { position: fixed; inset: 0; z-index: 20; background: #000; pointer-events: none; }
     #playback-entry-cover img { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 100%; height: auto; max-height: 100%; object-fit: fill; }
+    /* iOS 26 Safari ignores theme-color and tints the status bar from the topmost
+       opaque fixed element at the top edge. Without this strip it sampled the video
+       frame, so light videos left the status bar white. Only covers the status bar
+       area (the back button starts below it). It stays hit-testable on purpose:
+       Safari's sampling follows the element that owns the top-centre point. */
+    #playback-status-tint { position: fixed; top: 0; left: 0; right: 0; height: max(12px, env(safe-area-inset-top, 0px)); background: #000000; z-index: 2147483647; }
   </style>
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -17,6 +23,7 @@
   <title>视频平台</title>
 </head>
 <body>
+  <div id="playback-status-tint" aria-hidden="true"></div>
   <script>
     // Paint the clicked cover before module downloads, Vue startup or API requests.
     try {
