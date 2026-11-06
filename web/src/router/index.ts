@@ -18,7 +18,7 @@ const router = createRouter({
       children: [
         { path: 'chat',    name: 'chat',         component: () => import('@/views/ChatView.vue') },
         { path: 'long',    name: 'long',         component: () => import('@/views/LongVideoView.vue') },
-        { path: 'short',   name: 'short',        component: () => import('@/views/ShortVideoView.vue') },
+        { path: 'short', redirect: '/long' },
         { path: 'live', redirect: '/short' },
         { path: 'fortune', name: 'fortune',      component: () => import('@/views/FortuneView.vue') },
         { path: 'me',      name: 'me',           component: () => import('@/views/ProfileView.vue') },

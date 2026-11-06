@@ -11,7 +11,6 @@ watch(() => route.name, name => {
 }, { immediate: true })
 const tabs = [
   { name: 'chat', label: '群聊' },
-  { name: 'short', label: '短视频' },
   { name: 'upload', label: '发布视频' },
   { name: 'long', label: '长视频' },
   { name: 'me', label: '我' },
