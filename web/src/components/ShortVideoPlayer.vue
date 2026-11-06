@@ -22,6 +22,14 @@ const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
+const commentsEnabled = ref(false)
+async function refreshCommentSetting() {
+  try {
+    const response = await fetch('/api/video-comments/settings', { cache: 'no-store' })
+    commentsEnabled.value = response.ok && (await response.json()).enabled === true
+  } catch { commentsEnabled.value = false }
+  if (!commentsEnabled.value) showComments.value = false
+}
 const danmakuComments = ref<Record<number, ShortVideoComment[]>>({})
 const danmakuEnabled = ref(false)
 const pageVisible = ref(!document.hidden)
@@ -510,7 +518,7 @@ function openPersonalCenter() {
 }
 
 function share(_id: number) { panel.value='share'; preview.value='' }
-function openComments(_id: number) { showComments.value=true;void refreshInteractions() }
+function openComments(_id: number) { if (!commentsEnabled.value) return; showComments.value=true;void refreshInteractions() }
 async function copyLink() {
  if (!currentVideo.value) return
  try {await navigator.clipboard.writeText(location.origin+'/player.html?id='+currentVideo.value.id);showToast('链接已复制')} catch {showToast('复制失败，请使用系统分享')}
@@ -538,8 +546,9 @@ const previousChrome = pageChrome.map(element => ({
   scheme: element.style.colorScheme,
 }))
 onMounted(async () => {
+  void refreshCommentSetting()
   try { danmakuEnabled.value = localStorage.getItem('short-video-danmaku') === 'true' } catch { /* Optional preference. */ }
-  interactionTimer=setInterval(()=>{void refreshInteractions()},15000)
+  interactionTimer=setInterval(()=>{void refreshInteractions();void refreshCommentSetting()},15000)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pagehide', suspendPlayback)
   window.addEventListener('pageshow', onPageShow)
@@ -676,15 +685,15 @@ onUnmounted(() => {
         <div v-if="isNear(idx)" class="player-actions" @click.stop>
           <button class="author-avatar" aria-label="查看作者主页" @click="panel='author'"><AvatarContent :src="v.user?.avatar" :name="v.user?.name || v.user?.username"/><b>＋</b></button>
           <button aria-label="点赞视频" :class="{liked:currentState.liked}" @click="like(v.id)"><PlayerIcon name="heart"/><span>{{v.likes}}</span></button>
-          <button aria-label="查看评论" @click="openComments(v.id)"><PlayerIcon name="comment"/><span>{{v.comments_count}}</span></button>
+          <button v-if="commentsEnabled" aria-label="查看评论" @click="openComments(v.id)"><PlayerIcon name="comment"/><span>{{v.comments_count}}</span></button>
           <button aria-label="收藏视频" :class="{saved:currentState.favorited}" @click="favorite(v.id)"><PlayerIcon name="star"/><span>{{v.favorites}}</span></button>
           <button aria-label="分享视频" @click="share(v.id)"><PlayerIcon name="share"/><span>{{v.shares || '分享'}}</span></button>
         </div>
 
-        <CommentDanmaku v-if="idx === currentIdx && danmakuEnabled" :key="v.id" :comments="danmakuComments[v.id] || []" :paused="playback.paused || playback.waiting || !pageVisible || showComments || panel !== null"/>
+        <CommentDanmaku v-if="commentsEnabled && idx === currentIdx && danmakuEnabled" :key="v.id" :comments="danmakuComments[v.id] || []" :paused="playback.paused || playback.waiting || !pageVisible || showComments || panel !== null"/>
         <div v-if="idx === currentIdx" class="player-left-stack">
         <div class="player-extras" @click.stop>
-          <button class="danmaku-toggle" :class="{enabled:danmakuEnabled}" :aria-pressed="danmakuEnabled" :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'" @click="toggleDanmaku">弹<span aria-hidden="true">{{danmakuEnabled?'✓':'╱'}}</span></button>
+          <button v-if="commentsEnabled" class="danmaku-toggle" :class="{enabled:danmakuEnabled}" :aria-pressed="danmakuEnabled" :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'" @click="toggleDanmaku">弹<span aria-hidden="true">{{danmakuEnabled?'✓':'╱'}}</span></button>
           <button class="recommend-button" :class="{liked:currentState.liked}" :aria-pressed="currentState.liked" :disabled="interactionBusy" aria-label="点赞推荐" @click="like(v.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h4v11H3zM9 21V10l5-8c3 0 3 3 1 7h5c2 0 2 2 1 5l-2 7z"/></svg>{{v.likes}} 人推荐<span aria-hidden="true">›</span></button>
         </div>
         <button class="player-info" aria-label="查看评论信息" @click.stop="openComments(v.id)">
@@ -695,7 +704,7 @@ onUnmounted(() => {
         <button v-if="idx === currentIdx" class="player-personal-center" aria-label="进入个人中心" @click.stop="openPersonalCenter">
           <span><AvatarContent :src="auth.user?.avatar" :name="auth.user?.name || auth.user?.username"/></span>
         </button>
-        <button v-if="idx === currentIdx" class="player-comment-entry" @click.stop="openComments(v.id)">
+        <button v-if="commentsEnabled && idx === currentIdx" class="player-comment-entry" @click.stop="openComments(v.id)">
           <span>发条有爱评论～</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M8 8v2m8-2v2"/></svg>
         </button>
       </section>

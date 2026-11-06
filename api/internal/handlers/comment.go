@@ -32,6 +32,10 @@ type createCommentReq struct {
 }
 
 func (h *CommentHandler) Create(c *gin.Context) {
+	if !videoCommentsEnabled(videoCommentsSettingsFile) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "视频评论已关闭"})
+		return
+	}
 	videoID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	uid := middleware.CurrentUserID(c)
 	var req createCommentReq

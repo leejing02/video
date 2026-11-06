@@ -163,6 +163,10 @@ func (h *ShortVideoHandler) ListComments(c *gin.Context) {
 }
 
 func (h *ShortVideoHandler) CreateComment(c *gin.Context) {
+	if !videoCommentsEnabled(videoCommentsSettingsFile) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "视频评论已关闭"})
+		return
+	}
 	uid := middleware.CurrentUserID(c)
 	if uid == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})

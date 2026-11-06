@@ -11,6 +11,7 @@ const id = Number(route.params.id)
 const video = ref<Video | null>(null)
 const comments = ref<Comment[]>([])
 const commentText = ref('')
+const commentsEnabled = ref(false)
 
 async function load() {
   video.value = await videoApi.show(id)
@@ -25,6 +26,7 @@ async function like() {
 }
 
 async function sendComment() {
+  if (!commentsEnabled.value) return
   const text = commentText.value.trim()
   if (!text || !video.value) return
   try {
@@ -36,7 +38,13 @@ async function sendComment() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void fetch('/api/video-comments/settings', { cache: 'no-store' })
+    .then(response => response.ok ? response.json() : null)
+    .then(data => { commentsEnabled.value = data?.enabled === true })
+    .catch(() => { commentsEnabled.value = false })
+})
 </script>
 
 <template>
@@ -78,7 +86,7 @@ onMounted(load)
       </div>
     </div>
 
-    <div class="flex-none border-t border-gray-200 p-2 flex gap-2 safe-bottom">
+    <div v-if="commentsEnabled" class="flex-none border-t border-gray-200 p-2 flex gap-2 safe-bottom">
       <input
         v-model="commentText"
         placeholder="说点什么…"
