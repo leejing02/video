@@ -28,6 +28,7 @@ SVCS=$(for s in api admin web; do echo "$CHANGED" | grep -q "^$s/" && echo "$s";
 ```
 
 - 不使用 `reset --hard`、`down -v`、`migrate:fresh`。
+- 线上数据库由 `schema.sql` 建表，Laravel 迁移记录不全：**不要直接运行 `php artisan migrate`**（会从建 users 表开始重跑并报错），新迁移一律用 `--path=` 指定单个文件。
 - 出现 `Not possible to fast-forward` 时停止，提供 `git status` 与 `git log --oneline -5` 再处理。
 - `deploy/` 或 `.env.prod` 变化时，命令不会自动处理，需人工判断重建范围。
 
@@ -44,7 +45,8 @@ Go 接口会查询该字段，**必须先迁移数据库再重建 api**，否则
 ```bash
 cd /www/wwwroot/video && C="docker compose --project-directory . --env-file .env.prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.source.yml" && \
 git fetch origin "refs/heads/$(git symbolic-ref --short HEAD)" && git merge --ff-only FETCH_HEAD && \
-$C up -d --build --no-deps admin && $C exec admin php artisan migrate --force && \
+$C up -d --build --no-deps admin && \
+$C exec admin php artisan migrate --force --path=database/migrations/2026_11_07_000000_add_cover_source_to_videos.php && \
 $C up -d --build --no-deps api web && \
 $C exec admin php artisan efv:refresh-covers
 ```
