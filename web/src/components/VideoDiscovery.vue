@@ -31,6 +31,8 @@ const vMasonryTile: ObjectDirective<HTMLElement, boolean> = {
 onUnmounted(() => masonryObserver.disconnect())
 
 const props = defineProps<{ kind: 'short' | 'long' }>()
+// Temporary test: display short videos in the long-video tab without copying database rows.
+const previewShortsInLongTab = true
 const router = useRouter()
 const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
 const shortCategories = [
@@ -231,7 +233,7 @@ async function load(append = false) {
   const nextPage = append ? page.value + 1 : 1
   try {
     let categoryId = selected.value ?? undefined
-    if (props.kind === 'long' && categoryId !== undefined) {
+    if (props.kind === 'long' && !previewShortsInLongTab && categoryId !== undefined) {
       const selectedName = shortCategories.find(category => category.id === categoryId)?.name
       const response = await loadLongCategories()
       if (request !== generation) return
@@ -246,7 +248,7 @@ async function load(append = false) {
       categoryId = matchedCategory.id
     }
     const params = { category_id: categoryId, page: nextPage, per_page: 30 }
-    const result = await (props.kind === 'long'
+    const result = await (props.kind === 'long' && !previewShortsInLongTab
       ? videoApi.list({ ...params, type: 'long' })
       : !append
         ? loadShortFeedFirstPage(selected.value)
@@ -318,7 +320,15 @@ const returnCovers = ref<Record<number, string>>({})
 const returnRatios = ref<Record<number, string>>({})
 let openingPlayback = false
 async function open(video: ShortVideo | Video, event: MouseEvent) {
-  if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
+  if (props.kind === 'long') {
+    if (!previewShortsInLongTab) return router.push({ name: 'video-detail', params: { id: video.id } })
+    const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
+    playbackReturnPoster = poster
+    playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
+    playerItems.value = visible.value as ShortVideo[]
+    playerIndex.value = visible.value.findIndex(v => v.id === video.id)
+    return
+  }
   if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
@@ -449,7 +459,7 @@ onMounted(() => {
     })()
     return
   }
-  void loadLongCategories().catch(() => {})
+  if (!previewShortsInLongTab) void loadLongCategories().catch(() => {})
 })
 </script>
 
