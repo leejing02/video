@@ -98,3 +98,31 @@ $stats = $run(true);
 $assert($stats['eligible'] === 1 && $stats['existing'] === 0, 'Stale import link prevented reimport.');
 $assert($stats['source_total'] === 1 && $stats['scanned'] === 1, 'Source totals were not reported.');
 echo "EFV reconciliation checks passed.\n";
+
+config(['services.efv.api_key' => 'test-key']);
+app()->instance(\App\Services\EfvMediaDomains::class, new \App\Services\EfvMediaDomains('/nonexistent/efv-test-domains.json'));
+\Illuminate\Support\Facades\Storage::fake('public');
+Http::swap(new \Illuminate\Http\Client\Factory());
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=');
+Http::fake(function ($request) use ($id, $png, $assert) {
+    $path = parse_url($request->url(), PHP_URL_PATH);
+    if ($path === '/api/getmoviestatus') {
+        return Http::response(['success' => 1, 'data' => [
+            '_id' => $id,
+            'poster' => '/primary.png',
+            'poster2' => ['url' => '/secondary.png'],
+        ]]);
+    }
+
+    $assert($path === '/primary.png', 'A valid primary cover should take precedence over the secondary cover.');
+    $assert(str_contains($request->url(), '?_efv_cover_refresh='), 'A refresh must bypass the cached unsigned image URL.');
+
+    return Http::response($png, 200, ['Content-Type' => 'image/png']);
+});
+$video = Video::findOrFail(3);
+$video->update(['cover' => 'shorts/covers/efv-old.webp']);
+(new EfvShortVideoSync())->refreshPublishedCover($video, $id);
+$expected = 'shorts/covers/efv-'.hash('sha256', $png).'.png';
+$assert($video->fresh()->cover === $expected, 'Refreshing a published cover must update its storage key.');
+$assert(\Illuminate\Support\Facades\Storage::disk('public')->get($expected) === $png, 'The updated cover bytes were not stored.');
+echo "EFV published cover refresh checks passed.\n";

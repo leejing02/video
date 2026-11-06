@@ -44,7 +44,7 @@ func (h *ShortVideoHandler) applyMediaDomain(video *models.ShortVideoWithRelatio
 		return
 	}
 	if video.Status == "published" && video.ID > 0 && (video.Cover == nil || *video.Cover == "" ||
-		strings.HasPrefix(*video.Cover, "shorts/covers/efv-") || isEFVRemoteCover(*video.Cover, origin)) {
+		isEFVRemoteCover(*video.Cover, origin)) {
 		cover := fmt.Sprintf("/efv-covers/%d", video.ID)
 		video.Cover = &cover
 	}

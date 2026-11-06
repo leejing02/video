@@ -30,7 +30,7 @@ class EfvShortVideoSync
 
     public function linkedMovies(): iterable
     {
-        foreach (DB::table('efv_gallery_batches')->whereNotNull('files')->cursor() as $batch) {
+        foreach (DB::table('efv_gallery_batches')->whereNotNull('files')->orderBy('id')->cursor() as $batch) {
             foreach (json_decode($batch->files, true) ?? [] as $order => $entry) {
                 $videoId = (int) ($entry['video_id'] ?? 0);
                 $id = $entry['efv_id'] ?? ($batch->group_id ? substr(hash('sha256', $batch->group_id.':'.$order), 0, 24) : null);
@@ -55,6 +55,25 @@ class EfvShortVideoSync
         );
     }
 
+    public function refreshPublishedCover(Video $video, string $id): void
+    {
+        $previous = $video->cover;
+        $covers = $this->coverCandidates($this->fetchMovie($id));
+        $origin = app(EfvMediaDomains::class)->read()['image_origin'];
+        $cover = $this->downloadCover($covers, $origin, fresh: true);
+        if (!$cover) {
+            throw new DomainException('未取得可用的 EFV 封面。');
+        }
+        if ($cover === $previous) {
+            return;
+        }
+
+        // Keep a cover an editor or another sync saved while the request was in flight.
+        $video->newQuery()->whereKey($video->getKey())
+            ->where('status', Video::STATUS_PUBLISHED)
+            ->where('cover', $previous)->update(['cover' => $cover]);
+    }
+
     public function sync(Video $video, ?string $id, bool $automatic = false): ?string
     {
         return $this->applyTranscodedMovie($video, $this->fetchMovie($id), $automatic);
@@ -70,7 +89,7 @@ class EfvShortVideoSync
         }
 
         try {
-            $response = Http::acceptJson()->withHeaders(['token' => $key])
+            $response = Http::acceptJson()->withHeaders(['token' => $key, 'Cache-Control' => 'no-cache'])
                 ->withoutRedirecting()->connectTimeout(5)->timeout(15)
                 ->get($endpoint.'/api/getmoviestatus', ['id' => $id]);
         } catch (ConnectionException) {
@@ -106,7 +125,7 @@ class EfvShortVideoSync
         $coverFailure = '未取得可用封面，请检查 EFV 封面地址。';
         if ($replaceCover) {
             try {
-                $cover = $this->downloadCover($covers, $imageOrigin);
+                $cover = $this->downloadCover($covers, $imageOrigin, fresh: true);
             } catch (DomainException $exception) {
                 $coverFailure = $exception->getMessage();
             }
@@ -164,27 +183,22 @@ class EfvShortVideoSync
         ])));
     }
 
-    public function downloadCover(array $covers, ?string $imageOrigin): ?string
+    public function downloadCover(array $covers, ?string $imageOrigin, bool $fresh = false): ?string
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $failure = null;
-        $best = null;
         foreach ($covers as $candidate) {
             try {
                 $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
-                $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source) : null;
-                if ($cover && (!$best || $cover['pixels'] > $best['pixels'])) {
-                    $best = $cover;
+                $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source, $fresh) : null;
+                if ($cover) {
+                    $path = 'shorts/covers/efv-'.hash('sha256', $cover['bytes']).'.'.$cover['extension'];
+
+                    return Storage::disk('public')->put($path, $cover['bytes']) ? $path : null;
                 }
             } catch (DomainException $exception) {
                 $failure = $exception;
             }
-        }
-
-        if ($best) {
-            $path = 'shorts/covers/efv-'.hash('sha256', $best['bytes']).'.'.$best['extension'];
-
-            return Storage::disk('public')->put($path, $best['bytes']) ? $path : null;
         }
 
         if ($failure) {
@@ -208,7 +222,7 @@ class EfvShortVideoSync
         return $imageOrigin.$parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
-    private function fetchCover(string $endpoint, string $url): ?array
+    private function fetchCover(string $endpoint, string $url, bool $fresh): ?array
     {
         if (!preg_match('/\.(?:jpe?g|png|webp|gif)$/iD', (string) parse_url($url, PHP_URL_PATH))) {
             return null;
@@ -218,6 +232,10 @@ class EfvShortVideoSync
             if ((parse_url($url)[$part] ?? null) !== (parse_url($endpoint)[$part] ?? null)) {
                 return null;
             }
+        }
+
+        if ($fresh && parse_url($url, PHP_URL_QUERY) === null) {
+            $url .= '?_efv_cover_refresh='.bin2hex(random_bytes(8));
         }
 
         try {
@@ -274,7 +292,7 @@ class EfvShortVideoSync
             throw new DomainException('EFV 封面内容无效，请检查图片响应和加密设置。');
         }
 
-        return ['bytes' => $bytes, 'extension' => $extension, 'pixels' => $image[0] * $image[1]];
+        return ['bytes' => $bytes, 'extension' => $extension];
     }
 
     private function mediaUrl(string $endpoint, mixed $value): ?string

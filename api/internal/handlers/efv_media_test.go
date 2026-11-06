@@ -41,6 +41,13 @@ func TestEFVFrontendCoverRoute(t *testing.T) {
 	if video.Cover == nil || *video.Cover != "/efv-covers/8" {
 		t.Fatal("expected dynamic EFV cover URL")
 	}
+	for _, storedCover := range []string{"shorts/covers/efv-old.webp", "shorts/covers/efv-new.webp"} {
+		video.Cover = &storedCover
+		handler.applyMediaDomain(&video, nil, false)
+		if *video.Cover != storedCover {
+			t.Fatal("synced cover must keep its content-versioned storage path")
+		}
+	}
 	custom := "shorts/covers/manual.jpg"
 	video.Cover = &custom
 	handler.applyMediaDomain(&video, nil, false)

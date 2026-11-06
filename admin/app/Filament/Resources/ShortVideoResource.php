@@ -157,6 +157,7 @@ class ShortVideoResource extends VideoResource
                     ->action(function (Video $record) {
                         abort_unless(static::canEdit($record), 403);
 
+                        $previousCover = $record->cover;
                         try {
                             $warning = app(EfvShortVideoSync::class)->publish($record);
                         } catch (DomainException $exception) {
@@ -168,7 +169,9 @@ class ShortVideoResource extends VideoResource
                         if ($warning) {
                             Notification::make()->warning()->title($warning)->send();
                         } else {
-                            Notification::make()->success()->title('已同步并发布到前台')->send();
+                            Notification::make()->success()->title('已同步并发布到前台')
+                                ->body($record->cover === $previousCover ? '本次同步后的封面未变化。' : '已更新封面。')
+                                ->send();
                         }
                     }),
                 Tables\Actions\EditAction::make(),

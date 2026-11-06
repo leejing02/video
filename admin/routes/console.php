@@ -35,6 +35,38 @@ Artisan::command('efv:sync-short-videos', function () {
             $this->warn("短视频 {$videoId}：{$exception->getMessage()}");
         }
     }
+    // Existing covers use the remaining time after pending videos have been handled.
+    if (microtime(true) < $deadline) {
+        $checkpoint = Cache::get('efv:cover-refresh:checkpoint');
+        $lastVisited = null;
+        foreach ($sync->linkedMovies() as $videoId => $movieId) {
+            if ($checkpoint !== null) {
+                if ($checkpoint === $videoId) {
+                    $checkpoint = null;
+                }
+                continue;
+            }
+            if (microtime(true) >= $deadline) {
+                Cache::put('efv:cover-refresh:checkpoint', $lastVisited, now()->addDay());
+                return;
+            }
+
+            $lastVisited = $videoId;
+            $video = Video::find($videoId);
+            if (!$video || $video->status !== Video::STATUS_PUBLISHED
+                || !str_starts_with((string) $video->cover, 'shorts/covers/efv-')
+                || !Cache::add("efv:cover-refresh:{$videoId}", true, 300)) {
+                continue;
+            }
+
+            try {
+                $sync->refreshPublishedCover($video, $movieId);
+            } catch (DomainException $exception) {
+                $this->warn("短视频 {$videoId}：{$exception->getMessage()}");
+            }
+        }
+        Cache::forget('efv:cover-refresh:checkpoint');
+    }
 })->purpose('同步 EFV 已转码的短视频并补齐封面');
 
 Schedule::command('efv:sync-short-videos')
