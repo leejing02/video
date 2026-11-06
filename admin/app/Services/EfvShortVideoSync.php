@@ -177,9 +177,14 @@ class EfvShortVideoSync
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
 
+        // EFV crops 封面1 (poster) to the landscape size set in 转码设置 (e.g. 450x230);
+        // an uploaded 封面2 keeps its ratio and screenshots keep the video resolution.
+        $screenshots = $movie['screenshots'] ?? null;
+
         return array_values(array_unique(array_filter([
             $this->mediaUrl($endpoint, $movie['poster'] ?? null),
             $this->mediaUrl($endpoint, data_get($movie, 'poster2.url')),
+            $this->mediaUrl($endpoint, is_array($screenshots) ? reset($screenshots) : null),
         ])));
     }
 
@@ -187,18 +192,31 @@ class EfvShortVideoSync
     {
         $endpoint = rtrim((string) config('services.efv.endpoint'), '/');
         $failure = null;
+        $chosen = null;
         foreach ($covers as $candidate) {
             try {
                 $source = $this->coverSource($endpoint, $candidate, $imageOrigin);
                 $cover = $source ? $this->fetchCover($imageOrigin ?? $endpoint, $source, $fresh) : null;
-                if ($cover) {
-                    $path = 'shorts/covers/efv-'.hash('sha256', $cover['bytes']).'.'.$cover['extension'];
-
-                    return Storage::disk('public')->put($path, $cover['bytes']) ? $path : null;
-                }
             } catch (DomainException $exception) {
                 $failure = $exception;
+                continue;
             }
+            if (!$cover) {
+                continue;
+            }
+            // Keep the first usable cover unless it is the cropped landscape poster:
+            // short videos are mostly portrait, so prefer a later portrait image.
+            $chosen ??= $cover;
+            if ($cover['height'] >= $cover['width']) {
+                $chosen = $cover;
+                break;
+            }
+        }
+
+        if ($chosen) {
+            $path = 'shorts/covers/efv-'.hash('sha256', $chosen['bytes']).'.'.$chosen['extension'];
+
+            return Storage::disk('public')->put($path, $chosen['bytes']) ? $path : null;
         }
 
         if ($failure) {
@@ -292,7 +310,7 @@ class EfvShortVideoSync
             throw new DomainException('EFV 封面内容无效，请检查图片响应和加密设置。');
         }
 
-        return ['bytes' => $bytes, 'extension' => $extension];
+        return ['bytes' => $bytes, 'extension' => $extension, 'width' => (int) $image[0], 'height' => (int) $image[1]];
     }
 
     private function mediaUrl(string $endpoint, mixed $value): ?string

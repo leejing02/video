@@ -126,3 +126,33 @@ $expected = 'shorts/covers/efv-'.hash('sha256', $png).'.png';
 $assert($video->fresh()->cover === $expected, 'Refreshing a published cover must update its storage key.');
 $assert(\Illuminate\Support\Facades\Storage::disk('public')->get($expected) === $png, 'The updated cover bytes were not stored.');
 echo "EFV published cover refresh checks passed.\n";
+
+// EFV crops 封面1 to a landscape size; a portrait screenshot must replace it.
+$pngOf = function (int $width, int $height): string {
+    $chunk = fn (string $type, string $data) => pack('N', strlen($data)).$type.$data.pack('N', crc32($type.$data));
+    return "\x89PNG\r\n\x1a\n".$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 2, 0, 0, 0)).$chunk('IEND', '');
+};
+$landscape = $pngOf(450, 230);
+$portrait = $pngOf(720, 1280);
+$requested = [];
+$screenshots = ['/videos/x/1.png', '/videos/x/0.png'];
+Http::swap(new \Illuminate\Http\Client\Factory());
+Http::fake(function ($request) use ($id, $landscape, $portrait, &$requested, &$screenshots) {
+    $path = parse_url($request->url(), PHP_URL_PATH);
+    if ($path === '/api/getmoviestatus') {
+        return Http::response(['success' => 1, 'data' => ['_id' => $id, 'poster' => '/cover.png', 'screenshots' => $screenshots]]);
+    }
+    $requested[] = $path;
+    return Http::response($path === '/cover.png' ? $landscape : $portrait, 200, ['Content-Type' => 'image/png']);
+});
+Video::whereKey($video->id)->update(['cover' => 'shorts/covers/efv-old.webp']);
+(new EfvShortVideoSync())->refreshPublishedCover($video->fresh(), $id);
+$assert($video->fresh()->cover === 'shorts/covers/efv-'.hash('sha256', $portrait).'.png', 'A portrait screenshot must replace a cropped landscape poster.');
+$assert($requested === ['/cover.png', '/videos/x/1.png'], 'Only the poster and first screenshot should be fetched.');
+
+$screenshots = [];
+$requested = [];
+Video::whereKey($video->id)->update(['cover' => 'shorts/covers/efv-old.webp']);
+(new EfvShortVideoSync())->refreshPublishedCover($video->fresh(), $id);
+$assert($video->fresh()->cover === 'shorts/covers/efv-'.hash('sha256', $landscape).'.png', 'Without a portrait alternative the poster must be kept.');
+echo "EFV portrait cover preference checks passed.\n";
