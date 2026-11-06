@@ -123,7 +123,6 @@ function endBackSwipe(event: TouchEvent) {
   swipeTimer = setTimeout(returnToConversations, swipeDuration.value + 20)
 }
 
-function merge(id: number, incoming: Message[], history = false) {
 function groupCacheKey() {
   const user = auth.user?.id
   return user ? `chat:recent-groups:v1:${user}` : ''
@@ -136,6 +135,7 @@ function readGroupCache(key: string): { id: number; messages: Message[] }[] {
   } catch { return [] }
 }
 
+function merge(id: number, incoming: Message[], history = false) {
   const values = new Map((cache.value[id] ?? []).map(item => [item.id, item]))
   for (const item of incoming) if (item.chat_room_id === id) values.set(item.id, item)
   const sorted = [...values.values()].sort((a, b) => a.id - b.id)
