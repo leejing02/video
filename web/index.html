@@ -20,7 +20,7 @@
     try {
       const feed = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
       const snap = JSON.parse(sessionStorage.getItem('short-playback-return') || 'null')
-      if (location.pathname === '/short' && feed && feed.returning && snap && snap.entry === feed.entry &&
+      if ((location.pathname === '/short' || location.pathname === '/long') && feed && feed.returning && snap && snap.entry === feed.entry &&
           typeof snap.html === 'string' && Array.isArray(snap.styles) && snap.frame) {
         const layer = document.createElement('div')
         layer.id = 'playback-return-replica'

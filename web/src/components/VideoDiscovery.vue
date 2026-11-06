@@ -35,6 +35,8 @@ const props = defineProps<{ kind: 'short' | 'long' }>()
 const previewShortsInLongTab = true
 // Temporarily clear the discovery display without deleting the source videos.
 const hideDiscoveryVideos = true
+// Lists showing short videos open them like the short tab (iPhone: standalone player.html).
+const showsShortVideos = props.kind === 'short' || previewShortsInLongTab
 const router = useRouter()
 const navigationHidden = inject<Ref<boolean>>('mainNavigationHidden', ref(false))
 const shortCategories = [
@@ -328,15 +330,7 @@ const returnCovers = ref<Record<number, string>>({})
 const returnRatios = ref<Record<number, string>>({})
 let openingPlayback = false
 async function open(video: ShortVideo | Video, event: MouseEvent) {
-  if (props.kind === 'long') {
-    if (!previewShortsInLongTab) return router.push({ name: 'video-detail', params: { id: video.id } })
-    const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
-    playbackReturnPoster = poster
-    playerCover.value = poster?.naturalWidth ? poster.currentSrc : ''
-    playerItems.value = visible.value as ShortVideo[]
-    playerIndex.value = visible.value.findIndex(v => v.id === video.id)
-    return
-  }
+  if (!showsShortVideos) return router.push({ name: 'video-detail', params: { id: video.id } })
   if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
@@ -352,7 +346,7 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
       Math.abs(a.getBoundingClientRect().top - viewportTop) - Math.abs(b.getBoundingClientRect().top - viewportTop),
     ).slice(0, 6)
     const snapshot = {
-      id: video.id, entry, items: visible.value, created: Date.now(),
+      id: video.id, entry, items: visible.value, created: Date.now(), path: location.pathname,
       discovery: { ratios, searching: searching.value, categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
     }
     // A static copy of this screen lets the player shrink back into its card and
@@ -400,10 +394,10 @@ function applyPlaybackLikes(counts: Record<number, number> | undefined) {
 }
 
 function restorePlaybackList() {
-  if (props.kind !== 'short') return false
+  if (!showsShortVideos) return false
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
-    if (!saved?.returning) return false
+    if (!saved?.returning || (saved.path && saved.path !== location.pathname)) return false
     sessionStorage.removeItem('short-playback-feed')
     const state = saved.discovery
     if (!Array.isArray(state?.items) || !state.items.length) return false
@@ -492,7 +486,7 @@ onMounted(() => {
       <TransitionGroup tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
         <div v-for="grid in grids" :key="grid.key" class="video-grid short-masonry" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[{ 'long-grid': kind === 'long', 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
-          <VideoCard v-for="video in grid.items" v-masonry-tile="true" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="kind === 'short' ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
+          <VideoCard v-for="video in grid.items" v-masonry-tile="true" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="showsShortVideos ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
           <template v-if="!grid.items.length && ((kind === 'long' && (!query || error || loading)) || (kind === 'short' && (grid.hidden || loading)))"><div v-for="n in 4" :key="'placeholder-' + n" class="video-skeleton" /></template>
         </div>
       </TransitionGroup>

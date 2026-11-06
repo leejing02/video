@@ -47,6 +47,10 @@ function tintStatusBar(color: string) {
   next.style.backgroundColor = color
   strip.replaceWith(next)
 }
+// The list page that opened playback: /long while 推荐 shows short videos.
+function listPath(saved: { path?: unknown } | null | undefined) {
+  return saved?.path === '/long' ? '/long' : '/short'
+}
 function returnTarget(videoId?: number) {
   if (!returnLayer?.isConnected) return undefined
   tintStatusBar('#ffffff')
@@ -58,8 +62,10 @@ function returnTarget(videoId?: number) {
 }
 
 function close() {
+  let back = '/short'
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+    back = listPath(saved)
     if (saved?.id === id && saved.entry === route.query.entry) {
       // Restore the list where the return animation ended.
       const discovery = returnTop === undefined ? saved.discovery : { ...saved.discovery, top: returnTop }
@@ -70,7 +76,7 @@ function close() {
     }
   } catch { /* Returning to the list does not require session storage. */ }
   tintStatusBar('#ffffff')
-  location.replace('/short')
+  location.replace(back)
 }
 
 async function load() {
@@ -82,7 +88,7 @@ async function load() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
     if (route.query.entry && saved && (saved.entry !== route.query.entry || saved.returning)) {
-      location.replace('/short')
+      location.replace(listPath(saved))
       return
     }
     if (saved?.id === id && saved.entry === route.query.entry && Array.isArray(saved.items)) {
@@ -107,7 +113,7 @@ function onPageShow(event: PageTransitionEvent) {
   if (!event.persisted) return
   try {
     const saved = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
-    if (route.query.entry && (saved?.entry !== route.query.entry || saved.returning)) location.replace('/short')
+    if (route.query.entry && (saved?.entry !== route.query.entry || saved.returning)) location.replace(listPath(saved))
   } catch { location.replace('/short') }
 }
 onMounted(() => { window.addEventListener('pageshow', onPageShow); void load() })
