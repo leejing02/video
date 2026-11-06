@@ -280,6 +280,8 @@ function selectCategory(category: number | null) {
   if (dragDirection.value) return
   if (category === selected.value && !error.value) return
   releaseOffset.value = 0
+  returnCovers.value = {}
+  returnRatios.value = {}
   selected.value = category
   void load()
 }
@@ -291,6 +293,8 @@ function closePlayer() {
     if (scrollArea.value) scrollArea.value.scrollTop = listScrollTop
   })
 }
+const returnCovers = ref<Record<number, string>>({})
+const returnRatios = ref<Record<number, string>>({})
 let openingPlayback = false
 async function open(video: ShortVideo | Video, event: MouseEvent) {
   if (props.kind === 'long') return router.push({ name: 'video-detail', params: { id: video.id } })
@@ -299,15 +303,33 @@ async function open(video: ShortVideo | Video, event: MouseEvent) {
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
     openingPlayback = true
     const entry = crypto.randomUUID()
+    const viewportTop = scrollArea.value?.getBoundingClientRect().top ?? 0
+    const loaded = [...(scrollArea.value?.querySelectorAll<HTMLImageElement>('.video-grid:not(.invisible) img[data-video-cover]') ?? [])]
+      .filter(image => image.naturalWidth && image.naturalHeight)
+    const ratios = Object.fromEntries(loaded.map(image => [
+      image.dataset.videoCover, `${image.naturalWidth} / ${image.naturalHeight}`,
+    ]))
+    const nearby = loaded.sort((a, b) =>
+      Math.abs(a.getBoundingClientRect().top - viewportTop) - Math.abs(b.getBoundingClientRect().top - viewportTop),
+    ).slice(0, 6)
     const snapshot = {
       id: video.id, entry, items: visible.value, created: Date.now(),
-      discovery: { categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
+      discovery: { ratios, searching: searching.value, categories: categories.value, items: videos.value, category: displayedCategory.value, page: page.value, more: more.value, query: query.value, top: scrollArea.value?.scrollTop ?? 0 },
     }
-    const cover = await portablePlaybackCover(poster)
+    const [cover, nearbyCovers] = await Promise.all([
+      portablePlaybackCover(poster),
+      Promise.all(nearby.map(async image => [image.dataset.videoCover, await portablePlaybackCover(image)])),
+    ])
     if (disposed) return
     try {
       // The initial HTML can paint these bytes before loading the Vue bundle.
-      sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
+      try {
+        sessionStorage.setItem('short-playback-feed', JSON.stringify({
+          ...snapshot, cover, returnCovers: Object.fromEntries(nearbyCovers.filter(([, source]) => source)),
+        }))
+      } catch {
+        sessionStorage.setItem('short-playback-feed', JSON.stringify({ ...snapshot, cover }))
+      }
       window.location.replace(`/player.html?id=${video.id}&entry=${entry}`)
       return
     } catch {
@@ -338,6 +360,9 @@ function restorePlaybackList() {
     const state = saved.discovery
     if (!Array.isArray(state?.items) || !state.items.length) return false
     if (Array.isArray(state.categories)) categories.value = state.categories
+    returnCovers.value = saved.returnCovers ?? {}
+    returnRatios.value = state.ratios ?? {}
+    searching.value = !!state.searching
     videos.value = state.items
     applyPlaybackLikes(saved.updatedLikes)
     selected.value = displayedCategory.value = state.category ?? null
@@ -368,7 +393,8 @@ function restorePlaybackList() {
 onMounted(() => {
   document.addEventListener('visibilitychange', restoreDiscovery)
   window.addEventListener('pageshow', restoreCachedDiscovery)
-  if (!restorePlaybackList()) void load()
+  if (restorePlaybackList() && categories.value.length) return
+  if (!videos.value.length) void load()
   const request = props.kind === 'short' ? shortVideoApi.categories() : categoryApi.list('long')
   void request.then(async result => {
     if (disposed) return
@@ -405,7 +431,7 @@ onMounted(() => {
       <TransitionGroup v-else tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
         <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'short' ? 'short-masonry' : 'long-grid', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
-          <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id)" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
+          <VideoCard v-for="video in grid.items" v-masonry-tile="kind === 'short'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="kind === 'short' ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
         </div>
       </TransitionGroup>
       <div v-if="error" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
