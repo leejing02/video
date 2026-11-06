@@ -22,7 +22,6 @@ const currentIdx = ref(props.initialIndex)
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
-const latestComments = ref<Record<number, ShortVideoComment | null>>({})
 const danmakuComments = ref<Record<number, ShortVideoComment[]>>({})
 const danmakuEnabled = ref(false)
 const pageVisible = ref(!document.hidden)
@@ -442,22 +441,20 @@ async function refreshInteractions() {
       comments_count: value.comments_count, shares: value.shares,
     })
     if (value.comments_count === 0) {
-      latestComments.value[item.id] = null
       danmakuComments.value[item.id] = []
     }
-    else void refreshLatestComment(item.id, version)
+    else void refreshDanmakuComments(item.id, version)
   } catch {
     // Preserve known state on transient connection errors.
   }
 }
-async function refreshLatestComment(id: number, version: number) {
+async function refreshDanmakuComments(id: number, version: number) {
   try {
     const result = await shortVideoApi.comments(id, { page: 1, per_page: 20 })
     if (disposed || version !== interactionVersion || videos.value[currentIdx.value]?.id !== id) return
-    latestComments.value[id] = result.data[0] ?? null
     danmakuComments.value[id] = result.data
   } catch {
-    // Keep the last preview until the next successful refresh.
+    // Keep the existing comments until the next successful refresh.
   }
 }
 watch(() => auth.user?.id, () => {
@@ -691,11 +688,8 @@ onUnmounted(() => {
           <button class="recommend-button" :class="{liked:currentState.liked}" :aria-pressed="currentState.liked" :disabled="interactionBusy" aria-label="点赞推荐" @click="like(v.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h4v11H3zM9 21V10l5-8c3 0 3 3 1 7h5c2 0 2 2 1 5l-2 7z"/></svg>{{v.likes}} 人推荐<span aria-hidden="true">›</span></button>
         </div>
         <button class="player-info" aria-label="查看评论信息" @click.stop="openComments(v.id)">
-          <template v-if="latestComments[v.id]">
-            <span class="player-comment-name">@{{latestComments[v.id]?.user?.name || latestComments[v.id]?.user?.username || '用户'}}</span>
-            <span class="player-comment-content">{{latestComments[v.id]?.content}}</span>
-          </template>
-          <template v-else><span class="player-comment-name">评论</span><span class="player-comment-content">暂无评论，来说点什么吧</span></template>
+          <span class="player-comment-name">{{v.user?.name || v.user?.username || '用户'}}</span>
+          <span class="player-comment-content">{{v.title}}</span>
         </button>
         </div>
         <button v-if="idx === currentIdx" class="player-personal-center" aria-label="进入个人中心" @click.stop="openPersonalCenter">
