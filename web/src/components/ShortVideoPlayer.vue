@@ -225,6 +225,21 @@ function setupObserver() {
   })
 }
 
+// Safari blocks autoplay with sound in a page the user has not tapped yet (the iPhone
+// player opens as its own document), so playback falls back to muted. The next tap or
+// touch on the player turns the sound back on; until then a 开启声音 button shows.
+const autoMuted = ref(false)
+function unmute() {
+  if (!autoMuted.value) return false
+  autoMuted.value = false
+  const video = activeVideo()
+  if (video) {
+    video.muted = false
+    if (!video.paused) void video.play().catch(() => {})
+  }
+  return true
+}
+
 async function playVideo(video: HTMLVideoElement, autoplay = false) {
   if (document.hidden || suspended || (autoplay && manuallyPaused)) return
   if (video.readyState === HTMLMediaElement.HAVE_NOTHING) return
@@ -235,6 +250,7 @@ async function playVideo(video: HTMLVideoElement, autoplay = false) {
     if (video !== activeVideo() || (error instanceof DOMException && error.name === 'AbortError')) return
     if (autoplay && error instanceof DOMException && error.name === 'NotAllowedError') {
       video.muted = true
+      autoMuted.value = true
       await video.play().catch(() => {})
     } else if (!autoplay) {
       showToast('暂时无法播放')
@@ -246,6 +262,7 @@ function syncVideo(el: HTMLVideoElement, idx: number) {
   if (idx === currentIdx.value) {
     if (document.hidden || suspended) return
     el.muted = false
+    autoMuted.value = false
     void playVideo(el, true)
   } else {
     el.pause()
@@ -409,6 +426,8 @@ function togglePlay() {
   const video = activeVideo()
   const item = currentVideo.value
   if (!video || !item) return
+  // First tap on a muted autoplay turns the sound on instead of pausing.
+  if (unmute() && !video.paused) return
   if (loadState.value === 'failed') {
     manuallyPaused = false
     void attachSource(video, item)
@@ -694,6 +713,7 @@ onUnmounted(() => {
         <CommentDanmaku v-if="commentsEnabled && idx === currentIdx && danmakuEnabled" :key="v.id" :comments="danmakuComments[v.id] || []" :paused="playback.paused || playback.waiting || !pageVisible || showComments || panel !== null"/>
         <div v-if="idx === currentIdx" class="player-left-stack">
         <div class="player-extras" @click.stop>
+          <button v-if="autoMuted" class="sound-toggle" aria-label="开启声音" @click="unmute"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="m16 9 5 6m0-6-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>开启声音</button>
           <button v-if="commentsEnabled" class="danmaku-toggle" :class="{enabled:danmakuEnabled}" :aria-pressed="danmakuEnabled" :aria-label="danmakuEnabled ? '关闭弹幕' : '开启弹幕'" @click="toggleDanmaku">弹<span aria-hidden="true">{{danmakuEnabled?'✓':'╱'}}</span></button>
           <button class="recommend-button" :class="{liked:currentState.liked}" :aria-pressed="currentState.liked" :disabled="interactionBusy" aria-label="点赞推荐" @click="like(v.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h4v11H3zM9 21V10l5-8c3 0 3 3 1 7h5c2 0 2 2 1 5l-2 7z"/></svg>{{v.likes}} 人推荐<span aria-hidden="true">›</span></button>
         </div>
@@ -733,6 +753,7 @@ onUnmounted(() => {
 <style scoped>
 .player-left-stack{position:absolute;left:12px;right:72px;bottom:64px;display:flex;flex-direction:column;gap:5px;align-items:stretch}
 .player-extras{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.sound-toggle{background:#242424b3;color:#fff;border-radius:5px;display:flex;align-items:center;gap:4px;min-height:28px;padding:3px 7px;font-size:12px}.sound-toggle svg{width:16px;height:16px;fill:currentColor}
 .danmaku-toggle,.recommend-button{background:#242424b3;color:#fff;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:4px;min-height:28px;padding:3px 7px;font-size:12px}
 .danmaku-toggle{font-size:15px;font-weight:600}.danmaku-toggle span{font-size:10px}.danmaku-toggle.enabled{color:#fff;background:#555c}
 .recommend-button svg{width:15px;height:15px;fill:currentColor}.recommend-button.liked{color:#ff315b}.recommend-button>span{font-size:20px;line-height:16px}.recommend-button:disabled{opacity:.6}
