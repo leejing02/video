@@ -30,7 +30,7 @@ function hexBytes(hex: string) {
   return out
 }
 
-async function decryptAes(bytes: Uint8Array, config: EfvImageConfig): Promise<Uint8Array | null> {
+async function decryptAes(bytes: Uint8Array<ArrayBuffer>, config: EfvImageConfig): Promise<Uint8Array<ArrayBuffer> | null> {
   const { cipher, key, iv } = config
   if (!cipher || !key || !iv || !globalThis.crypto?.subtle) return null
   const cbc = cipher.includes('cbc')
@@ -56,7 +56,7 @@ function decryptXor(bytes: Uint8Array) {
 
 export async function decodeEfvImage(data: ArrayBuffer, config: EfvImageConfig | null): Promise<Blob | null> {
   const bytes = new Uint8Array(data)
-  const candidates: (() => Promise<Uint8Array | null> | Uint8Array)[] = [
+  const candidates: (() => Promise<Uint8Array<ArrayBuffer> | null> | Uint8Array<ArrayBuffer> | null)[] = [
     () => bytes,
     () => (config ? decryptAes(bytes, config) : null),
     () => decryptXor(bytes),
