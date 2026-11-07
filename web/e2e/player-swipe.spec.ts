@@ -55,16 +55,80 @@ test.describe('C. 上下滑动', () => {
     await expectBackButtonInPlace(page)
   })
 
-  test('真实触摸手势上滑（Chromium 触摸滚动）', async ({ page, mocks, browserName }) => {
+  test('真实触摸手势上滑（Chromium 触摸滚动）', async ({ page, mocks, browserName }, info) => {
     test.skip(browserName !== 'chromium', 'Playwright WebKit has no touch-scroll input; WebKit scrolling is covered by the programmatic scroll-snap tests and the real-iPhone check.')
     await openPlayer(page, mocks, { items: three() })
+    await expect(feed(page)).toBeVisible()
     await expectSettledOn(page, 0)
-    const cdp = await page.context().newCDPSession(page)
-    await cdp.send('Input.synthesizeScrollGesture', {
-      // Start mid-screen, away from the bottom controls (the progress bar is touch-action: none).
-      x: 195, y: 520, yDistance: -400, speed: 400, gestureSourceType: 'touch',
+    const nextFrame = () => page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+    await nextFrame()
+    await nextFrame()
+
+    // Passive, observe-only listeners: they never call preventDefault/stopPropagation.
+    await page.evaluate(() => {
+      const list = document.querySelector('section[data-idx]')!.parentElement!
+      const diag = { touchstart: 0, touchmove: 0, touchend: 0, touchcancel: 0, touchmovePrevented: false, scroll: 0 }
+      const count = (event: Event) => {
+        if (event.type === 'scroll') diag.scroll++
+        else diag[event.type as 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel']++
+      }
+      // defaultPrevented is final only after every listener ran, so read it in the bubble phase on window.
+      const prevented = (event: Event) => { if (event.defaultPrevented) diag.touchmovePrevented = true }
+      const types = ['touchstart', 'touchmove', 'touchend', 'touchcancel'] as const
+      types.forEach(type => document.addEventListener(type, count, { capture: true, passive: true }))
+      window.addEventListener('touchmove', prevented, { passive: true })
+      list.addEventListener('scroll', count, { passive: true })
+      const w = window as unknown as { __touchDiag: { data: typeof diag; cleanup: () => void } }
+      w.__touchDiag = {
+        data: diag,
+        cleanup: () => {
+          types.forEach(type => document.removeEventListener(type, count, { capture: true }))
+          window.removeEventListener('touchmove', prevented)
+          list.removeEventListener('scroll', count)
+        },
+      }
     })
-    await expectSettledOn(page, 1)
-    await expectBackButtonInPlace(page)
+    type TouchDiag = { touchstart: number; touchmove: number; touchend: number; touchcancel: number; touchmovePrevented: boolean; scroll: number }
+    const diagnostics = () => page.evaluate(() => {
+      const data = (window as unknown as { __touchDiag: { data: TouchDiag } }).__touchDiag.data
+      const list = document.querySelector('section[data-idx]')!.parentElement!
+      const live = [...document.querySelectorAll<HTMLElement>('section[data-idx]')].filter(el => !el.hasAttribute('inert'))
+      return { ...data, scrollTop: list.scrollTop, screen: list.clientHeight, activeIndex: live.length === 1 ? Number(live[0].dataset.idx) : -live.length }
+    })
+
+    try {
+      // One finger from the lower-middle of the screen (away from the bottom controls) upwards
+      // by 400px in 20 steps. Each CDP call resolves once the browser has taken the event,
+      // and a rendered frame passes before the next one.
+      const cdp = await page.context().newCDPSession(page)
+      const x = 195
+      const startY = 520
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: startY }] })
+      await nextFrame()
+      for (let step = 1; step <= 20; step++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: startY - step * 20 }] })
+        await nextFrame()
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await nextFrame()
+
+      // 1. The touch events reached the page and nothing cancelled them.
+      const received = await diagnostics()
+      expect(received.touchstart, 'touchstart events received').toBe(1)
+      expect(received.touchmove, 'touchmove events received').toBeGreaterThanOrEqual(10)
+      expect(received.touchend, 'touchend events received').toBe(1)
+      expect(received.touchcancel, 'touchcancel events').toBe(0)
+      expect(received.touchmovePrevented, 'a touchmove was defaultPrevented').toBe(false)
+
+      // 2. The feed scrolled and snapped to the second video.
+      await expectSettledOn(page, 1)
+      await expectBackButtonInPlace(page)
+      info.annotations.push({ type: 'touch-diagnostics', description: JSON.stringify(await diagnostics()) })
+    } catch (error) {
+      await info.attach('touch-diagnostics', { body: JSON.stringify(await diagnostics(), null, 2), contentType: 'application/json' })
+      throw error
+    } finally {
+      await page.evaluate(() => (window as unknown as { __touchDiag?: { cleanup: () => void } }).__touchDiag?.cleanup())
+    }
   })
 })
