@@ -19,6 +19,33 @@ const props = defineProps<{ items: ShortVideo[]; initialIndex: number; initialCo
 const emit = defineEmits<{ close: []; likesChanged: [id: number, count: number] }>()
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
+const isAndroid = /Android/i.test(navigator.userAgent)
+let androidSwipe: { x: number; y: number; index: number; active: boolean } | undefined
+function androidSwipeStart(event: TouchEvent) {
+  if (!isAndroid || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('button,input,textarea,a'))) return
+  const touch = event.touches[0]
+  if (touch.clientX < 32) return
+  androidSwipe = { x: touch.clientX, y: touch.clientY, index: currentIdx.value, active: false }
+}
+function androidSwipeMove(event: TouchEvent) {
+  if (!androidSwipe || event.touches.length !== 1 || !containerRef.value) return
+  const touch = event.touches[0]
+  const dy = androidSwipe.y - touch.clientY
+  if (!androidSwipe.active && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(touch.clientX - androidSwipe.x) * 1.5) androidSwipe.active = true
+  if (!androidSwipe.active) return
+  event.preventDefault()
+  const height = containerRef.value.clientHeight
+  containerRef.value.scrollTop = androidSwipe.index * height + Math.max(-height, Math.min(height, dy))
+}
+function androidSwipeEnd(event: TouchEvent) {
+  const swipe = androidSwipe
+  androidSwipe = undefined
+  if (!swipe?.active || !containerRef.value) return
+  const dy = swipe.y - (event.changedTouches[0]?.clientY ?? swipe.y)
+  const direction = Math.abs(dy) > 55 ? Math.sign(dy) : 0
+  const index = Math.max(0, Math.min(videos.value.length - 1, swipe.index + direction))
+  containerRef.value.scrollTo({ top: index * containerRef.value.clientHeight, behavior: 'smooth' })
+}
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
 const showComments = ref(false)
@@ -647,7 +674,7 @@ onUnmounted(() => {
     @touchstart.passive="startBack" @touchmove="moveBack" @touchend.passive="endBack" @touchcancel.passive="cancelBack">
     <button class="player-close" aria-label="返回视频列表" @click="zoomBack">‹</button>
 
-    <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory">
+    <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory" :class="{ 'android-feed': isAndroid }" @touchstart.passive="androidSwipeStart" @touchmove="androidSwipeMove" @touchend.passive="androidSwipeEnd" @touchcancel.passive="androidSwipeEnd">
       <section
         v-for="(v, idx) in videos"
         :key="v.id"
@@ -822,6 +849,7 @@ onUnmounted(() => {
   text-shadow: 0 1px 4px #0009;
 }
 .short-player { touch-action: pan-y; will-change: transform; }
+.android-feed { touch-action: none; }
 
 .short-playback-frame { object-fit: fill; object-position: center; }
 .short-playback-frame:not([data-frame-ready="true"]) { opacity: 0; }
