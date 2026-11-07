@@ -236,8 +236,22 @@ function unmute() {
   if (video) {
     video.muted = false
     if (!video.paused) void video.play().catch(() => {})
+    unlockPreloaded(video)
   }
   return true
+}
+
+// Safari only frees <video> elements that are created after a tap, or played inside one.
+// The next videos are preloaded before that tap, so start and stop them inside it too;
+// otherwise the second video asks for sound again.
+function unlockPreloaded(current: HTMLVideoElement) {
+  containerRef.value?.querySelectorAll('video').forEach(el => {
+    if (el === current || !el.paused) return
+    el.muted = false
+    const started = el.play()
+    el.pause()
+    void started?.catch(() => {})
+  })
 }
 
 // iPhone: the first video waits on its play button, so the tap that starts it is inside
@@ -439,6 +453,7 @@ function togglePlay() {
     autoMuted.value = false
     video.muted = false
     void video.play().catch(() => {})
+    unlockPreloaded(video)
     return
   }
   // First tap on a muted autoplay turns the sound on instead of pausing.
