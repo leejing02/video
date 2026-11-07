@@ -329,11 +329,21 @@ function closePlayer() {
 const returnCovers = ref<Record<number, string>>({})
 const returnRatios = ref<Record<number, string>>({})
 let openingPlayback = false
+// Experiment (sound on entry): /long?inline-player=1 makes iPhone play in this page, so the
+// tap that opened the video lets Safari play it with sound; ?inline-player=0 turns it off.
+// Without the flag iPhone keeps the standalone black player.html.
+function inlinePlayerTest() {
+  try {
+    const flag = new URLSearchParams(location.search).get('inline-player')
+    if (flag !== null) sessionStorage.setItem('inline-player-test', flag === '1' ? '1' : '0')
+    return sessionStorage.getItem('inline-player-test') === '1'
+  } catch { return false }
+}
 async function open(video: ShortVideo | Video, event: MouseEvent) {
   if (!showsShortVideos) return router.push({ name: 'video-detail', params: { id: video.id } })
   if (openingPlayback) return
   const poster = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('.video-poster img')
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+  if (!inlinePlayerTest() && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
     openingPlayback = true
     const entry = crypto.randomUUID()
     const viewportTop = scrollArea.value?.getBoundingClientRect().top ?? 0
@@ -449,6 +459,7 @@ async function hideReturnReplica() {
   removeReturnReplica()
 }
 onMounted(() => {
+  inlinePlayerTest()
   const restored = !(props.kind === 'short' && hideDiscoveryVideos) && restorePlaybackList()
   if (!restored) removeReturnReplica()
   if (!videos.value.length) void load()
