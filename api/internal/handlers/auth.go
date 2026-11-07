@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourname/video-api/internal/auth"
@@ -38,6 +39,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	if IsGuestEmail(req.Email) || strings.HasPrefix(strings.ToLower(req.Username), "guest_") {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "该邮箱或用户名不可用"})
 		return
 	}
 	if exists, _ := h.Users.EmailExists(req.Email); exists {

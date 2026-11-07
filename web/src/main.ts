@@ -16,12 +16,15 @@ const auth = useAuthStore()
 auth.init()
 app.use(router)
 
-window.addEventListener('auth:unauthorized', () => {
+window.addEventListener('auth:unauthorized', async () => {
+  const wasGuest = auth.isGuest || !auth.user
   auth.$patch({ token: null, user: null })
   localStorage.removeItem('auth_user')
-  if (router.currentRoute.value.name !== 'login') {
-    router.replace({ name: 'login' })
-  }
+  localStorage.removeItem('auth_guest_expires')
+  if (router.currentRoute.value.name === 'login') return
+  // An expired guest identity is renewed for this device; real accounts sign in again.
+  if (wasGuest && await auth.ensureGuest()) return
+  router.replace({ name: 'login' })
 })
 
 app.mount('#app')
@@ -51,7 +54,7 @@ document.addEventListener('focusout', resizeViewport)
 // Restore auth after Safari restores an older document from its back-forward cache.
 window.addEventListener('pageshow', () => {
   auth.init()
-  if (auth.isLoggedIn && router.currentRoute.value.name === 'login') void router.replace('/chat')
+  if (auth.isLoggedIn && !auth.isGuest && router.currentRoute.value.name === 'login') void router.replace('/chat')
   resizeViewport()
 })
 document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false })

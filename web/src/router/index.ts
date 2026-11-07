@@ -52,8 +52,9 @@ router.beforeEach(async (to) => {
     window.location.replace(to.fullPath)
     return false
   }
-  if (auth.isLoggedIn && to.name === 'login') return { path: '/chat', replace: true }
-  if (!auth.isLoggedIn && !to.meta.public && to.name !== 'login') {
+  // Guests may open the login page to sign in or register a real account.
+  if (auth.isLoggedIn && !auth.isGuest && to.name === 'login') return { path: '/chat', replace: true }
+  if (!auth.isLoggedIn && !to.meta.public && to.name !== 'login' && !(await auth.ensureGuest())) {
     return { name: 'login', query: { next: to.fullPath } }
   }
 })

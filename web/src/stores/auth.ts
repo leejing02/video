@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { authApi } from '@/api/auth'
 import { setToken } from '@/api/client'
 import type { User } from '@/types/models'
+import { guestDeviceId, isGuestEmail } from '@/utils/guest-device'
+
+let guestRequest: Promise<boolean> | null = null
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -13,6 +16,8 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isLoggedIn: (state) => !!state.token,
+    // Temporary device identity (no registration); see utils/guest-device.ts.
+    isGuest: (state) => !!state.token && isGuestEmail(state.user?.email),
   },
 
   actions: {
@@ -36,6 +41,28 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    // Sign this device in as its guest when nobody is signed in.
+    ensureGuest(): Promise<boolean> {
+      if (this.token) return Promise.resolve(true)
+      guestRequest ??= (async () => {
+        try {
+          const data = await authApi.guest(guestDeviceId())
+          if (!data?.token) return false
+          this.token = data.token
+          this.user = data.user
+          setToken(data.token)
+          localStorage.setItem('auth_user', JSON.stringify(data.user))
+          localStorage.setItem('auth_guest_expires', data.expires_at)
+          return true
+        } catch {
+          return false
+        } finally {
+          guestRequest = null
+        }
+      })()
+      return guestRequest
+    },
+
     async login(email: string, password: string) {
       this.loading = true
       this.error = null
@@ -47,6 +74,7 @@ export const useAuthStore = defineStore('auth', {
         this.user = data.user
         setToken(data.token)
         localStorage.setItem('auth_user', JSON.stringify(data.user))
+        localStorage.removeItem('auth_guest_expires')
         return true
       } catch (e: any) {
         this.error = e.response?.data?.error ?? e.message ?? '登录失败'
@@ -67,6 +95,7 @@ export const useAuthStore = defineStore('auth', {
         this.user = data.user
         setToken(data.token)
         localStorage.setItem('auth_user', JSON.stringify(data.user))
+        localStorage.removeItem('auth_guest_expires')
         return true
       } catch (e: any) {
         this.error = e.response?.data?.error ?? e.message ?? '注册失败'
@@ -81,6 +110,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       setToken(null)
       localStorage.removeItem('auth_user')
+      localStorage.removeItem('auth_guest_expires')
       window.location.href = '/login'
     },
   },

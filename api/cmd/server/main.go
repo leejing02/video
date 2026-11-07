@@ -109,6 +109,7 @@ func main() {
 	// === 公开接口 ===
 	api.POST("/register", authH.Register)
 	api.POST("/login", authH.Login)
+	api.POST("/guest", authH.Guest)
 	api.GET("/categories", catH.List)
 	api.GET("/videos", vidH.List)
 	api.GET("/videos/:id", vidH.Show)

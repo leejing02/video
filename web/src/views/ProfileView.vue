@@ -18,6 +18,11 @@ async function loadVideos() {
   finally { loading.value = false }
 }
 onMounted(loadVideos)
+function guestExpiry() {
+  const raw = localStorage.getItem('auth_guest_expires')
+  const date = raw ? new Date(raw) : null
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('zh-CN') : ''
+}
 </script>
 
 <template>
@@ -26,7 +31,7 @@ onMounted(loadVideos)
     <section v-if="auth.user" class="profile-identity">
       <img v-if="auth.user.avatar" :src="auth.user.avatar" class="profile-avatar" alt="我的头像" />
       <span v-else class="profile-avatar">{{ auth.user.name?.[0] || '我' }}</span>
-      <div><h2>{{ auth.user.name }}</h2><p>@{{ auth.user.username }}</p><p v-if="auth.user.bio" class="profile-bio">{{ auth.user.bio }}</p></div>
+      <div><h2>{{ auth.user.name }}</h2><p v-if="auth.isGuest">游客身份{{ guestExpiry() ? `，有效期至 ${guestExpiry()}` : '' }}</p><p v-else>@{{ auth.user.username }}</p><p v-if="auth.user.bio" class="profile-bio">{{ auth.user.bio }}</p></div>
     </section>
     <nav class="profile-links" aria-label="个人功能">
       <button @click="router.push('/upload')"><span>发布视频</span><span aria-hidden="true">↗</span></button>
@@ -39,6 +44,7 @@ onMounted(loadVideos)
       <p v-else-if="!myVideos.length" class="feed-empty">还没有发布视频，记录你的第一份精彩吧</p>
       <div v-else class="video-grid long-grid"><VideoCard v-for="v in myVideos" :key="v.id" :video="v" layout="horizontal" @click="router.push({ name: 'video-detail', params: { id: v.id } })" /></div>
     </section>
-    <button class="logout-button" @click="auth.logout()">退出登录</button>
+    <button v-if="auth.isGuest" class="logout-button" @click="router.push('/login')">登录 / 注册账号</button>
+    <button v-else class="logout-button" @click="auth.logout()">退出登录</button>
   </div>
 </template>

@@ -6,7 +6,14 @@ export interface AuthResponse {
   token: string
 }
 
+export interface GuestResponse extends AuthResponse {
+  expires_at: string
+}
+
 export const authApi = {
+  guest: (deviceId: string) =>
+    post<GuestResponse>('/guest', { device_id: deviceId }),
+
   login: (email: string, password: string) =>
     post<AuthResponse>('/login', { email, password }),
 

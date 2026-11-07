@@ -70,3 +70,24 @@ func (r *UserRepo) UpdateProfile(id int64, name, bio, avatar, phone *string) err
 	`, name, bio, avatar, phone, id)
 	return err
 }
+
+// AgeSeconds is how long ago the user was created, measured by the database clock.
+func (r *UserRepo) AgeSeconds(id int64) (int64, error) {
+	var age int64
+	err := r.DB.Get(&age, `SELECT COALESCE(TIMESTAMPDIFF(SECOND, created_at, NOW()), 0) FROM users WHERE id = ?`, id)
+	return age, err
+}
+
+// RetireGuest disables an expired guest and frees its device-derived email/username
+// so the same device can be given a new identity. Its messages keep their author.
+func (r *UserRepo) RetireGuest(id int64) error {
+	_, err := r.DB.Exec(`
+		UPDATE users SET
+			email = CONCAT('guest-expired-', id, '@guest.invalid'),
+			username = CONCAT('guest_x', id),
+			is_active = 0,
+			updated_at = NOW()
+		WHERE id = ? AND email LIKE '%@guest.invalid'
+	`, id)
+	return err
+}
