@@ -451,8 +451,11 @@ function togglePlay() {
     awaitFirstTap.value = false
     manuallyPaused = false
     autoMuted.value = false
-    video.muted = false
+    // Same steps as the 开启声音 tap, which on iPhone also lets later videos keep their
+    // sound: start muted, then unmute inside this tap.
+    video.muted = true
     void video.play().catch(() => {})
+    video.muted = false
     unlockPreloaded(video)
     return
   }
@@ -682,7 +685,7 @@ onUnmounted(() => {
             class="absolute max-w-[80%] rounded-full bg-black/70 px-4 py-3 text-sm"
             @click.stop="togglePlay"
           >{{ loadError }}</button>
-          <span v-else-if="loadState === 'loading'" role="status" class="pointer-events-none absolute rounded-full bg-black/60 px-4 py-2 text-sm">
+          <span v-else-if="loadState === 'loading' && !awaitFirstTap" role="status" class="pointer-events-none absolute rounded-full bg-black/60 px-4 py-2 text-sm">
             正在加载视频…
           </span>
           <button
