@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -45,6 +44,7 @@ func issueGuestToken(secret string, user *models.User, expires time.Time) (strin
 	claims := auth.Claims{
 		UserID: user.ID,
 		Role:   user.Role,
+		Guest:  true,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expires),
@@ -52,6 +52,20 @@ func issueGuestToken(secret string, user *models.User, expires time.Time) (strin
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
+const guestNameChars = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+// guestName is a random 10-character nickname of lowercase letters and digits.
+func guestName() (string, error) {
+	buf := make([]byte, 10)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	for i, b := range buf {
+		buf[i] = guestNameChars[int(b)%len(guestNameChars)]
+	}
+	return string(buf), nil
 }
 
 type guestReq struct {
@@ -110,8 +124,13 @@ func (h *AuthHandler) Guest(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "游客身份获取失败"})
 			return
 		}
+		name, err := guestName()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "游客身份获取失败"})
+			return
+		}
 		user = &models.User{
-			Name:     fmt.Sprintf("游客%s", strings.ToUpper(key[:4])),
+			Name:     name,
 			Username: "guest_" + key[:12],
 			Email:    email,
 			Password: hash,

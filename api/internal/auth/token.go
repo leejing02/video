@@ -11,6 +11,8 @@ import (
 type Claims struct {
 	UserID int64  `json:"uid"`
 	Role   string `json:"role"`
+	// Guest marks a temporary device identity (see handlers/guest.go).
+	Guest bool `json:"guest,omitempty"`
 	jwt.RegisteredClaims
 }
 

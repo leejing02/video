@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, inject, watch, type Ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { chatApi } from '@/api/chat'
 import { WsClient } from '@/utils/ws'
@@ -216,6 +217,14 @@ async function older() {
   } catch { if (version === selectionVersion) error.value = '历史消息加载失败，请重试' }
   finally { if (version === selectionVersion) olderLoading.value = false }
 }
+// Guests can read group chats; speaking there needs a registered account.
+const router = useRouter()
+const registerPrompt = ref(false)
+watch(selected, () => { registerPrompt.value = false })
+function goRegister() {
+  registerPrompt.value = false
+  void router.push({ name: 'login', query: { mode: 'register', next: '/chat' } })
+}
 async function send(text: string, done: (success: boolean) => void) {
   const id = selected.value
   if (id === null || pending.value[id]) { done(false); return }
@@ -225,7 +234,11 @@ async function send(text: string, done: (success: boolean) => void) {
     merge(id, [message]); done(true)
     if (selected.value === id) { await nextTick(); bottom(); await markRead(id) }
     await refreshRooms()
-  } catch (e: any) { error.value = e.response?.data?.error || '发送失败，内容已保留，请重试'; done(false) }
+  } catch (e: any) {
+    if (e.response?.data?.code === 'guest_register_required') registerPrompt.value = true
+    else error.value = e.response?.data?.error || '发送失败，内容已保留，请重试'
+    done(false)
+  }
   finally { pending.value[id] = false }
 }
 async function direct(message: Message) {
@@ -303,7 +316,11 @@ onUnmounted(() => { clearTimeout(swipeTimer); chatDetailOpen.value = false; disp
           <ChatMessage v-for="message in messages" :key="message.id" :message="message" :is-mine="message.user_id === auth.user?.id" :allow-direct="room.kind !== 'direct'" @direct="direct(message)" />
           <p v-if="!loading && !messages.length" class="empty-messages">还没有消息，发一句问候吧</p>
         </div>
-        <ChatInput :key="room.id" :is-sending="pending[room.id]" @send="send" />
+        <div v-if="registerPrompt" class="guest-register-prompt" role="alertdialog" aria-labelledby="guest-register-title">
+          <p id="guest-register-title">游客不能在群里发言，注册后即可发言</p>
+          <div><button type="button" @click="registerPrompt = false">取消</button><button type="button" class="primary" @click="goRegister">去注册</button></div>
+        </div>
+        <ChatInput :key="room.id" :is-sending="pending[room.id]" :locked="auth.isGuest && room.kind !== 'direct'" @send="send" @locked="registerPrompt = true" />
       </template>
       <div v-else class="conversation-welcome"><div class="welcome-symbol">✈</div><h2>每一次分享，都有回应</h2><p>选择一个群聊，或从群成员发起私聊</p><span>消息实时同步 · 随时继续对话</span></div>
     </section>

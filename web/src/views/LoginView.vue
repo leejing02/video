@@ -7,7 +7,8 @@ import { postLoginPath } from '@/utils/mobile-shell'
 const router = useRouter()
 const auth = useAuthStore()
 
-const mode = ref<'login' | 'register'>('login')
+// ?mode=register opens the sign-up form (e.g. from a guest's chat prompt).
+const mode = ref<'login' | 'register'>(router.currentRoute.value.query.mode === 'register' ? 'register' : 'login')
 const name = ref('')
 const username = ref('')
 const email = ref('')
@@ -25,7 +26,7 @@ async function submit() {
     } else {
       if (await auth.register(name.value, username.value, email.value, password.value)) {
         password.value = ''
-        await router.replace('/chat')
+        await router.replace(postLoginPath(router.currentRoute.value.query.next))
       }
     }
   } catch (e: any) {

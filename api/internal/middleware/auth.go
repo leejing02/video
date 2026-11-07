@@ -11,6 +11,7 @@ import (
 const (
 	CtxUserID = "uid"
 	CtxRole   = "role"
+	CtxGuest  = "guest"
 )
 
 // AuthRequired 强制登录
@@ -23,6 +24,7 @@ func AuthRequired(secret string) gin.HandlerFunc {
 		}
 		c.Set(CtxUserID, claims.UserID)
 		c.Set(CtxRole, claims.Role)
+		c.Set(CtxGuest, claims.Guest)
 		c.Next()
 	}
 }
@@ -33,6 +35,7 @@ func AuthOptional(secret string) gin.HandlerFunc {
 		if claims, ok := extract(c, secret); ok {
 			c.Set(CtxUserID, claims.UserID)
 			c.Set(CtxRole, claims.Role)
+			c.Set(CtxGuest, claims.Guest)
 		}
 		c.Next()
 	}
@@ -71,4 +74,9 @@ func CurrentUserID(c *gin.Context) int64 {
 		}
 	}
 	return 0
+}
+
+// IsGuest reports whether the request is signed in as a temporary guest.
+func IsGuest(c *gin.Context) bool {
+	return c.GetBool(CtxGuest)
 }

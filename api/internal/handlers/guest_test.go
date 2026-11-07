@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/yourname/video-api/internal/auth"
+	"github.com/yourname/video-api/internal/middleware"
 	"github.com/yourname/video-api/internal/repos"
 )
 
@@ -57,7 +59,7 @@ func TestGuestReusesIdentityUntilItExpires(t *testing.T) {
 		t.Fatalf("got %d %s", w.Code, w.Body)
 	}
 	claims, err := auth.Parse("s", resp.Token)
-	if err != nil || claims.UserID != 7 {
+	if err != nil || claims.UserID != 7 || !claims.Guest {
 		t.Fatalf("token: %v %+v", err, claims)
 	}
 	if left := time.Until(claims.ExpiresAt.Time); left < 19*24*time.Hour || left > 20*24*time.Hour+time.Minute {
@@ -83,6 +85,9 @@ func TestGuestExpiredIdentityIsReplaced(t *testing.T) {
 	if w.Code != http.StatusOK || resp.User == nil || resp.User.ID != 8 || resp.User.Email != email {
 		t.Fatalf("got %d %s", w.Code, w.Body)
 	}
+	if !regexp.MustCompile(`^[a-z0-9]{10}$`).MatchString(resp.User.Name) {
+		t.Fatalf("new guest name %q must be 10 lowercase letters/digits", resp.User.Name)
+	}
 	if left := time.Until(resp.ExpiresAt); left < 30*24*time.Hour-time.Minute {
 		t.Fatalf("new guest must last 30 days, %v left", left)
 	}
@@ -103,5 +108,45 @@ func TestRegisterRejectsGuestAddresses(t *testing.T) {
 		if w.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("%s: got %d", body, w.Code)
 		}
+	}
+}
+
+func TestGuestCannotSpeakInGroups(t *testing.T) {
+	for _, kind := range []string{"global", "group"} {
+		t.Run(kind, func(t *testing.T) {
+			db, mock := accessTestDB(t)
+			room := func() *sqlmock.Rows {
+				return sqlmock.NewRows([]string{"id", "kind", "is_active"}).AddRow(7, kind, true)
+			}
+			mock.ExpectQuery("SELECT .* FROM chat_rooms WHERE id").WithArgs(int64(7)).WillReturnRows(room())
+			if kind != "global" {
+				mock.ExpectQuery("SELECT COUNT.*FROM chat_room_user").WithArgs(int64(7), int64(42)).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+			}
+			mock.ExpectQuery("SELECT .* FROM chat_rooms WHERE id").WithArgs(int64(7)).WillReturnRows(room())
+			h := &ChatHandler{Chat: repos.NewChatRepo(db)}
+			r := gin.New()
+			r.Use(func(c *gin.Context) { c.Set(middleware.CtxUserID, int64(42)); c.Set(middleware.CtxGuest, true) })
+			r.POST("/rooms/:id/messages", h.Send)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/rooms/7/messages", strings.NewReader(`{"content":"hi"}`)))
+			if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "guest_register_required") {
+				t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestGuestNameIsTenLowercaseLettersOrDigits(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		name, err := guestName()
+		if err != nil || !regexp.MustCompile(`^[a-z0-9]{10}$`).MatchString(name) {
+			t.Fatalf("bad guest name %q (%v)", name, err)
+		}
+		seen[name] = true
+	}
+	if len(seen) < 45 {
+		t.Fatal("guest names must be random")
 	}
 }

@@ -87,6 +87,13 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	if err := h.ensureCanRead(c, roomID); err != nil {
 		return
 	}
+	if middleware.IsGuest(c) {
+		// Guests may read group chats but must register before speaking in them.
+		if room, err := h.Chat.RoomByID(roomID); err != nil || room == nil || room.Kind != "direct" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "注册后才能在群里发言", "code": "guest_register_required"})
+			return
+		}
+	}
 	var req sendMsgReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
