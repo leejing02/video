@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
+use App\Models\ChatSpeaker;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -131,6 +132,15 @@ class UserResource extends Resource
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('启用')
                     ->boolean(),
+                // Group chats are 全体禁言 except for users switched on here.
+                Tables\Columns\ToggleColumn::make('can_speak')
+                    ->label('群聊发言')
+                    ->getStateUsing(fn (User $r) => (bool) $r->chat_speaker_exists)
+                    ->updateStateUsing(function (User $r, $state) {
+                        static::setCanSpeak($r, (bool) $state);
+
+                        return (bool) $state;
+                    }),
                 Tables\Columns\TextColumn::make('videos_count')
                     ->label('视频数')
                     ->counts('videos')
@@ -147,6 +157,12 @@ class UserResource extends Resource
                     ->relationship('roles', 'name')
                     ->multiple(),
                 Tables\Filters\TernaryFilter::make('is_active')->label('启用'),
+                Tables\Filters\TernaryFilter::make('can_speak')
+                    ->label('群聊发言')
+                    ->queries(
+                        true: fn ($q) => $q->whereHas('chatSpeaker'),
+                        false: fn ($q) => $q->whereDoesntHave('chatSpeaker'),
+                    ),
             ])
             ->actions([
                 Tables\Actions\Action::make('toggle_active')
@@ -198,10 +214,30 @@ class UserResource extends Resource
                             $u->update(['is_active' => false]);
                             $u->tokens()->delete();
                         })),
+                    Tables\Actions\BulkAction::make('allow_speak')
+                        ->label('允许群聊发言')
+                        ->icon('heroicon-o-chat-bubble-left-right')
+                        ->requiresConfirmation()
+                        ->action(fn ($records) => $records->each(fn (User $u) => static::setCanSpeak($u, true))),
+                    Tables\Actions\BulkAction::make('mute')
+                        ->label('取消群聊发言')
+                        ->icon('heroicon-o-speaker-x-mark')
+                        ->requiresConfirmation()
+                        ->action(fn ($records) => $records->each(fn (User $u) => static::setCanSpeak($u, false))),
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
+            ->modifyQueryUsing(fn ($query) => $query->withExists('chatSpeaker'))
             ->defaultSort('id', 'desc');
+    }
+
+    public static function setCanSpeak(User $user, bool $allowed): void
+    {
+        if ($allowed) {
+            ChatSpeaker::firstOrCreate(['user_id' => $user->id]);
+        } else {
+            ChatSpeaker::whereKey($user->id)->delete();
+        }
     }
 
     public static function getPages(): array

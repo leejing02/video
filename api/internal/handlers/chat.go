@@ -87,12 +87,12 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	if err := h.ensureCanRead(c, roomID); err != nil {
 		return
 	}
-	if middleware.IsGuest(c) {
-		// Guests may read group chats but must register before speaking in them.
-		if room, err := h.Chat.RoomByID(roomID); err != nil || room == nil || room.Kind != "direct" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "注册后才能在群里发言", "code": "guest_register_required"})
-			return
-		}
+	// Group chats are 全体禁言: only users an admin allowed (chat_speakers) may speak.
+	// Direct chats are not affected.
+	if room, err := h.Chat.RoomByID(roomID); err != nil || room == nil ||
+		(room.Kind != "direct" && !h.Chat.CanSpeak(uid)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "全体禁言", "code": "chat_muted"})
+		return
 	}
 	var req sendMsgReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -133,6 +133,12 @@ func (h *ChatHandler) Send(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusCreated, full)
+}
+
+// GET /chat/permissions — whether the signed-in user may speak in group chats.
+func (h *ChatHandler) Permissions(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"can_speak": h.Chat.CanSpeak(middleware.CurrentUserID(c))})
 }
 
 // POST /chat/rooms/:id/join

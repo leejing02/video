@@ -278,3 +278,10 @@ CREATE TABLE IF NOT EXISTS `bazi_charts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Users an admin allowed to speak in group chats; everyone else sees 全体禁言.
+CREATE TABLE IF NOT EXISTS `chat_speakers` (
+  `user_id` BIGINT UNSIGNED PRIMARY KEY,
+  `created_at` TIMESTAMP NULL,
+  CONSTRAINT `chat_speakers_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

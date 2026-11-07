@@ -241,3 +241,13 @@ func (r *ChatRepo) LoadMessageWithUser(id int64) (*models.ChatMessageWithUser, e
 		},
 	}, nil
 }
+
+// CanSpeak reports whether an admin allowed this user to speak in group chats.
+// Any error (including the table not existing yet) means no.
+func (r *ChatRepo) CanSpeak(userID int64) bool {
+	var n int
+	if err := r.DB.Get(&n, `SELECT COUNT(*) FROM chat_speakers WHERE user_id = ?`, userID); err != nil {
+		return false
+	}
+	return n > 0
+}

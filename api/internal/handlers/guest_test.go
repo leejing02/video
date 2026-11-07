@@ -111,29 +111,68 @@ func TestRegisterRejectsGuestAddresses(t *testing.T) {
 	}
 }
 
-func TestGuestCannotSpeakInGroups(t *testing.T) {
-	for _, kind := range []string{"global", "group"} {
-		t.Run(kind, func(t *testing.T) {
+func TestGroupChatsAreMutedExceptForAllowedSpeakers(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind   string
+		guest        bool
+		speaker      bool
+		wantMuted    bool
+		checkSpeaker bool
+	}{
+		{"guest in global", "global", true, false, true, true},
+		{"registered user in global", "global", false, false, true, true},
+		{"registered user in group", "group", false, false, true, true},
+		{"allowed speaker in global", "global", false, true, false, true},
+		{"allowed guest in group", "group", true, true, false, true},
+		{"direct chat is not muted", "direct", false, false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			db, mock := accessTestDB(t)
 			room := func() *sqlmock.Rows {
-				return sqlmock.NewRows([]string{"id", "kind", "is_active"}).AddRow(7, kind, true)
+				return sqlmock.NewRows([]string{"id", "kind", "is_active"}).AddRow(7, tc.kind, true)
 			}
 			mock.ExpectQuery("SELECT .* FROM chat_rooms WHERE id").WithArgs(int64(7)).WillReturnRows(room())
-			if kind != "global" {
+			if tc.kind != "global" {
 				mock.ExpectQuery("SELECT COUNT.*FROM chat_room_user").WithArgs(int64(7), int64(42)).
 					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 			}
 			mock.ExpectQuery("SELECT .* FROM chat_rooms WHERE id").WithArgs(int64(7)).WillReturnRows(room())
+			if tc.checkSpeaker {
+				n := 0
+				if tc.speaker {
+					n = 1
+				}
+				mock.ExpectQuery("SELECT COUNT.*FROM chat_speakers").WithArgs(int64(42)).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(n))
+			}
 			h := &ChatHandler{Chat: repos.NewChatRepo(db)}
 			r := gin.New()
-			r.Use(func(c *gin.Context) { c.Set(middleware.CtxUserID, int64(42)); c.Set(middleware.CtxGuest, true) })
+			r.Use(func(c *gin.Context) { c.Set(middleware.CtxUserID, int64(42)); c.Set(middleware.CtxGuest, tc.guest) })
 			r.POST("/rooms/:id/messages", h.Send)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/rooms/7/messages", strings.NewReader(`{"content":"hi"}`)))
-			if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "guest_register_required") {
+			muted := w.Code == http.StatusForbidden && strings.Contains(w.Body.String(), `"chat_muted"`) && strings.Contains(w.Body.String(), "全体禁言")
+			if muted != tc.wantMuted {
 				t.Fatalf("status = %d: %s", w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestChatPermissions(t *testing.T) {
+	db, mock := accessTestDB(t)
+	mock.ExpectQuery("SELECT COUNT.*FROM chat_speakers").WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery("SELECT COUNT.*FROM chat_speakers").WithArgs(int64(42)).WillReturnError(sqlmock.ErrCancelled)
+	h := &ChatHandler{Chat: repos.NewChatRepo(db)}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set(middleware.CtxUserID, int64(42)) })
+	r.GET("/chat/permissions", h.Permissions)
+	for _, want := range []string{`{"can_speak":true}`, `{"can_speak":false}`} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/chat/permissions", nil))
+		if w.Code != http.StatusOK || w.Body.String() != want {
+			t.Fatalf("got %d %s, want %s", w.Code, w.Body.String(), want)
+		}
 	}
 }
 

@@ -163,6 +163,7 @@ func main() {
 
 		priv.POST("/chat/direct", chatH.Direct)
 		priv.GET("/chat/rooms", chatH.MyRooms)
+		priv.GET("/chat/permissions", chatH.Permissions)
 		priv.GET("/chat/rooms/:id/messages", chatH.Messages)
 		priv.POST("/chat/rooms/:id/messages", chatH.Send)
 		priv.POST("/chat/rooms/:id/join", chatH.Join)

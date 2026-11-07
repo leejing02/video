@@ -75,10 +75,9 @@ button {cursor:pointer;}button:disabled{cursor:default;}
 .chat-composer { position: relative; display: flex; align-items: center; gap: 10px; padding: 11px 21px; background: #e5f0dfd9; backdrop-filter: blur(18px); border-top: 1px solid #c9d8c5; flex-shrink: 0; }
 .chat-composer input { flex: 1; background: #fff; border: 1px solid #dedee4; border-radius: 22px; padding: 10px 15px; color: #161616; }
 .chat-composer input::placeholder { color: #9898a0; }
-.guest-register-prompt { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #fff8e6; border-top: 1px solid #f0dca8; color: #5c4510; font-size: 14px; flex-shrink: 0; }
-.guest-register-prompt div { display: flex; gap: 8px; flex-shrink: 0; }
-.guest-register-prompt button { padding: 6px 12px; border-radius: 16px; color: #5c4510; }
-.guest-register-prompt .primary { background: #0088ef; color: #fff; }
+.chat-composer input:disabled { background: #f1f1f3; text-align: center; }
+.chat-composer input:disabled::placeholder { color: #8a8a92; }
+.emoji-toggle:disabled { opacity: .35; }
 .emoji-toggle { font-size: 29px; color: #8d98a3; width: 30px; }
 .send-button { display: grid; place-items: center; border-radius: 50%; background: #0088ef; width: 39px; height: 39px; flex-shrink: 0; color: white; }
 .send-button:disabled { opacity: .35; }

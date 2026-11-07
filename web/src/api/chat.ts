@@ -28,4 +28,7 @@ export const chatApi = {
   join: (roomId: number) => post(`/chat/rooms/${roomId}/join`),
 
   markRead: (roomId: number) => post(`/chat/rooms/${roomId}/read`),
+
+  // Group chats are 全体禁言 except for users an admin allowed to speak.
+  permissions: () => get<{ can_speak: boolean }>('/chat/permissions'),
 }
