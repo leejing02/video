@@ -240,8 +240,12 @@ function unmute() {
   return true
 }
 
+// iPhone: the first video waits on its play button, so the tap that starts it is inside
+// this page and Safari plays it with sound. Videos reached by swiping autoplay as usual.
+const awaitFirstTap = ref(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
 async function playVideo(video: HTMLVideoElement, autoplay = false) {
-  if (document.hidden || suspended || (autoplay && manuallyPaused)) return
+  if (document.hidden || suspended || (autoplay && (manuallyPaused || awaitFirstTap.value))) return
   if (video.readyState === HTMLMediaElement.HAVE_NOTHING) return
 
   try {
@@ -404,6 +408,7 @@ const vVideoSource: ObjectDirective<HTMLVideoElement, { id: number; url: string 
 
 watch(currentIdx, () => {
   manuallyPaused = false
+  awaitFirstTap.value = false
   warmCovers()
   loadState.value = 'loading'
   playback.value = { paused: true, current: 0, duration: 0, waiting: false }
@@ -426,6 +431,16 @@ function togglePlay() {
   const video = activeVideo()
   const item = currentVideo.value
   if (!video || !item) return
+  // Start the waiting first video inside this tap, even before it has loaded, so Safari
+  // ties the sound permission to this gesture.
+  if (awaitFirstTap.value && loadState.value !== 'failed') {
+    awaitFirstTap.value = false
+    manuallyPaused = false
+    autoMuted.value = false
+    video.muted = false
+    void video.play().catch(() => {})
+    return
+  }
   // First tap on a muted autoplay turns the sound on instead of pausing.
   if (unmute() && !video.paused) return
   if (loadState.value === 'failed') {
