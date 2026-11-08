@@ -138,12 +138,42 @@ test.describe('页面内播放', () => {
   test('播放结束显示「重新播放」，点击后从头播放', async ({ page }) => {
     await setupLong(page)
     await installStubs(page)
+    await page.addInitScript(() => {
+      const events: { type: string; time: number }[] = []
+      ;(window as unknown as { __mediaEvents: typeof events }).__mediaEvents = events
+      for (const type of ['seeking', 'seeked', 'waiting', 'canplay', 'playing', 'pause', 'ended']) {
+        document.addEventListener(type, event => {
+          if (event.target instanceof HTMLVideoElement && event.target.matches('video.lvp-video')) {
+            events.push({ type, time: performance.now() })
+          }
+        }, true)
+      }
+    })
     await openDetail(page)
     await ensurePlaying(page)
     await video(page).evaluate(v => { v.currentTime = Math.max(0, v.duration - 0.3) })
-    await expect(page.getByRole('button', { name: '重新播放' })).toBeVisible({ timeout: 8_000 })
-    await page.getByRole('button', { name: '重新播放' }).click()
-    await expect.poll(() => video(page).evaluate(v => !v.paused && v.currentTime < 2)).toBe(true)
+    try {
+      await expect(page.getByRole('button', { name: '重新播放' })).toBeVisible({ timeout: 8_000 })
+      await page.getByRole('button', { name: '重新播放' }).click()
+      await expect.poll(() => video(page).evaluate(v => !v.paused && v.currentTime < 2)).toBe(true)
+    } catch (error) {
+      try {
+        const state = await video(page).evaluate(v => ({
+          currentTime: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended,
+          seeking: v.seeking, readyState: v.readyState, networkState: v.networkState,
+        }))
+        const events = await page.evaluate(() => (window as unknown as { __mediaEvents: unknown[] }).__mediaEvents)
+        const visible = {
+          loading: await page.getByRole('status').filter({ hasText: '加载中…' }).isVisible(),
+          play: await page.getByRole('button', { name: '播放', exact: true }).first().isVisible(),
+          replay: await page.getByRole('button', { name: '重新播放', exact: true }).isVisible(),
+        }
+        console.error('播放结束诊断:', JSON.stringify({ events, state, visible }))
+      } catch (diagnosticError) {
+        console.error('播放结束诊断采集失败:', diagnosticError)
+      }
+      throw error
+    }
   })
 
   test('视频 404：显示错误与「重试」，进度条禁用、总时长 --:--；恢复后重试可加载', async ({ page }) => {
