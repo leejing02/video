@@ -95,7 +95,7 @@ function onTimeUpdate() {
 }
 function onPlay() { paused.value = false; ended.value = false; scheduleHide() }
 function onPause() { paused.value = true; showControls() }
-function onEnded() { ended.value = true; paused.value = true; showControls() }
+function onEnded() { waiting.value = false; loading.value = false; ended.value = true; paused.value = true; showControls() }
 function onWaiting() { waiting.value = true }
 function onPlaying() { waiting.value = false; loading.value = false }
 function onCanPlay() { waiting.value = false; loading.value = false }
