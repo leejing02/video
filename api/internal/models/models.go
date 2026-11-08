@@ -68,6 +68,15 @@ type Video struct {
 	PublishedAt   *time.Time `db:"published_at"   json:"published_at"`
 	CreatedAt     time.Time  `db:"created_at"     json:"created_at"`
 	UpdatedAt     time.Time  `db:"updated_at"     json:"updated_at"`
+
+	// Remaining videos columns, only so `SELECT v.*` scans; never part of the JSON output.
+	CoverSource *string    `db:"cover_source" json:"-"`
+	MD5         *string    `db:"md5"          json:"-"`
+	SizeBytes   int64      `db:"size_bytes"   json:"-"`
+	AuditStatus string     `db:"audit_status" json:"-"`
+	AuditNote   *string    `db:"audit_note"   json:"-"`
+	AuditedBy   *int64     `db:"audited_by"   json:"-"`
+	AuditedAt   *time.Time `db:"audited_at"   json:"-"`
 }
 
 // VideoWithRelations Video + 关联的 user / category（拼装用）

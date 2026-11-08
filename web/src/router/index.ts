@@ -18,7 +18,8 @@ const router = createRouter({
       children: [
         { path: 'chat',    name: 'chat',         component: () => import('@/views/ChatView.vue') },
         { path: 'long',    name: 'long',         component: () => import('@/views/LongVideoView.vue') },
-        { path: 'short', redirect: '/long' },
+        { path: 'long/category/:id(\\d+)', name: 'long-category', component: () => import('@/views/LongCategoryVideosView.vue') },
+        { path: 'short',   name: 'short',        component: () => import('@/views/ShortVideoView.vue') },
         { path: 'live', redirect: '/short' },
         { path: 'fortune', name: 'fortune',      component: () => import('@/views/FortuneView.vue') },
         { path: 'me',      name: 'me',           component: () => import('@/views/ProfileView.vue') },
@@ -44,6 +45,20 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
+
+// Whether the current route was reached through browser history (back/forward, an iOS swipe,
+// router.back()) rather than a push, a replace or a page load. The long-video list restores its
+// saved state only on such a return. The history listener runs before the router's own one.
+let pendingHistoryPop = false
+let reachedByHistory = false
+router.options.history.listen((_to, _from, info) => { pendingHistoryPop = String(info.type) === 'pop' })
+router.beforeEach(() => {
+  reachedByHistory = pendingHistoryPop
+  pendingHistoryPop = false
+})
+export function routeReachedByHistory() {
+  return reachedByHistory
+}
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()

@@ -42,7 +42,7 @@ function guestExpiry() {
       <p v-if="loading" class="feed-empty">正在加载作品…</p>
       <div v-else-if="error" class="feed-empty" role="alert"><p>作品加载失败</p><button @click="loadVideos">重试</button></div>
       <p v-else-if="!myVideos.length" class="feed-empty">还没有发布视频，记录你的第一份精彩吧</p>
-      <div v-else class="video-grid long-grid"><VideoCard v-for="v in myVideos" :key="v.id" :video="v" layout="horizontal" @click="router.push({ name: 'video-detail', params: { id: v.id } })" /></div>
+      <div v-else class="video-grid long-grid"><VideoCard v-for="v in myVideos" :key="v.id" :video="v" layout="horizontal" @click="router.push({ name: 'video-detail', params: { id: v.id }, state: { videoFrom: 'me' } })" /></div>
     </section>
     <button v-if="auth.isGuest" class="logout-button" @click="router.push('/login')">登录 / 注册账号</button>
     <button v-else class="logout-button" @click="auth.logout()">退出登录</button>

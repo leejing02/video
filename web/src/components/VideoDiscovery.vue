@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, inject, watch, ref, type Ref, type ObjectDirective } from 'vue'
 import { useRouter } from 'vue-router'
-import { categoryApi } from '@/api/category'
 import { shortVideoApi } from '@/api/shortVideo'
 import { videoApi } from '@/api/video'
 import { mediaUrl } from '@/utils/media-url'
 import { portablePlaybackCover } from '@/utils/playback-cover'
 import { captureReturnSnapshot, removeReturnReplica, RETURN_SNAPSHOT_KEY } from '@/utils/playback-return'
 import { loadShortFeedFirstPage, warmShortFeed } from '@/utils/short-feed-prefetch'
+import { routeReachedByHistory } from '@/router'
 import type { ShortVideo, Video } from '@/types/models'
 import CategoryStrip from './CategoryStrip.vue'
 import VideoCard from './VideoCard.vue'
@@ -30,11 +30,12 @@ const vMasonryTile: ObjectDirective<HTMLElement, boolean> = {
 }
 onUnmounted(() => masonryObserver.disconnect())
 
-const props = defineProps<{ kind: 'short' | 'long' }>()
+// categoryId: the long-video category opened from the category home (/long/category/:id).
+const props = defineProps<{ kind: 'short' | 'long'; categoryId?: number }>()
 // Temporary test: display short videos in the long-video tab without copying database rows.
-const previewShortsInLongTab = true
+const previewShortsInLongTab = false
 // Temporarily clear the discovery display without deleting the source videos.
-const hideDiscoveryVideos = true
+const hideDiscoveryVideos = false
 // Lists showing short videos open them like the short tab (iPhone: standalone player.html).
 const showsShortVideos = props.kind === 'short' || previewShortsInLongTab
 const router = useRouter()
@@ -46,19 +47,10 @@ const shortCategories = [
   { id: 10, name: '猎奇', cover: '/category-icons/curiosity.jpg' },
   { id: 99, name: '99', cover: null },
 ]
-const categories = ref<{ id: number; name: string; cover: string | null }[]>(shortCategories)
-let longCategoryRequest: ReturnType<typeof categoryApi.list> | undefined
-function loadLongCategories() {
-  if (!longCategoryRequest) {
-    longCategoryRequest = categoryApi.list('long').catch(error => {
-      longCategoryRequest = undefined
-      throw error
-    })
-  }
-  return longCategoryRequest
-}
-const selected = ref<number | null>(null)
-const displayedCategory = ref<number | null>(null)
+// Only the short tab shows a category strip; a long-video list shows the one category it was opened with.
+const categories = ref<{ id: number; name: string; cover: string | null }[]>(props.kind === 'long' ? [] : shortCategories)
+const selected = ref<number | null>(props.kind === 'long' ? props.categoryId ?? null : null)
+const displayedCategory = ref<number | null>(selected.value)
 const slideDirection = ref(0)
 const dragDirection = ref(0)
 const dragOffset = ref(0)
@@ -70,6 +62,8 @@ let categoryTouch: { x: number; y: number; id: number } | undefined
 
 function startCategorySwipe(event: TouchEvent) {
   categoryTouch = undefined
+  // A long-video list has no strip, so a sideways swipe never switches its category.
+  if (props.kind === 'long') return
   if (loading.value || playerIndex.value !== null || event.touches.length !== 1) return
   const touch = event.touches[0]
   if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return
@@ -228,7 +222,7 @@ async function load(append = false) {
     showStagedGrid()
     return
   }
-  retryAppend.value = props.kind === "short" && append
+  retryAppend.value = append
   loading.value = true
   error.value = ''
   if (!append) {
@@ -242,21 +236,7 @@ async function load(append = false) {
   }
   const nextPage = append ? page.value + 1 : 1
   try {
-    let categoryId = selected.value ?? undefined
-    if (props.kind === 'long' && !previewShortsInLongTab && categoryId !== undefined) {
-      const selectedName = shortCategories.find(category => category.id === categoryId)?.name
-      const response = await loadLongCategories()
-      if (request !== generation) return
-      const longCategories = Array.isArray(response) ? response : response.data ?? []
-      const matchedCategory = longCategories.find(category => category.name === selectedName)
-      if (!matchedCategory) {
-        videos.value = []
-        page.value = 1
-        more.value = false
-        return
-      }
-      categoryId = matchedCategory.id
-    }
+    const categoryId = selected.value ?? undefined
     const params = { category_id: categoryId, page: nextPage, per_page: 30 }
     const result = await (props.kind === 'long' && !previewShortsInLongTab
       ? videoApi.list({ ...params, type: 'long' })
@@ -451,7 +431,8 @@ async function hideReturnReplica() {
 onMounted(() => {
   const restored = !(props.kind === 'short' && hideDiscoveryVideos) && restorePlaybackList()
   if (!restored) removeReturnReplica()
-  if (!videos.value.length) void load()
+  const longRestored = props.kind === 'long' && restoreLongList()
+  if (!videos.value.length && !longRestored) void load()
   if (props.kind === 'short') {
     if (restored || hideDiscoveryVideos) return
     void (async () => {
@@ -461,17 +442,119 @@ onMounted(() => {
     })()
     return
   }
-  if (!previewShortsInLongTab) void loadLongCategories().catch(() => {})
 })
+// Long list only (separate from the short list's short-playback-feed): the list state is saved when
+// this list hands over to a video page, and restored when browser history comes back to this list
+// from that video (page back button, browser back, iOS swipe). Anything else loads normally.
+const LONG_RETURN_KEY = 'long-list-return'
+// This list's own route path; by the time the list unmounts the address already shows the video.
+const longListPath = router.currentRoute.value.path
+const LONG_RETURN_TTL = 30 * 60 * 1000
+const LONG_RETURN_MAX_CHARS = 2_000_000
+interface LongReturnState {
+  path: string
+  videoId: number
+  category: number | null
+  categories: { id: number; name: string; cover: string | null }[]
+  items: Video[]
+  page: number
+  more: boolean
+  top: number
+  savedAt: number
+}
+const isWholeNumber = (value: unknown, min = 0) => Number.isSafeInteger(value) && (value as number) >= min
+function saveLongReturn(videoId: number) {
+  try {
+    const state: LongReturnState = {
+      path: longListPath, videoId, category: displayedCategory.value, categories: categories.value,
+      items: videos.value as Video[], page: page.value, more: more.value,
+      top: scrollArea.value?.scrollTop ?? 0, savedAt: Date.now(),
+    }
+    const json = JSON.stringify(state)
+    // A very long list is not kept: going back then simply reloads the category.
+    if (json.length > LONG_RETURN_MAX_CHARS) sessionStorage.removeItem(LONG_RETURN_KEY)
+    else sessionStorage.setItem(LONG_RETURN_KEY, json)
+  } catch {
+    try { sessionStorage.removeItem(LONG_RETURN_KEY) } catch { /* storage unavailable: nothing to keep */ }
+  }
+}
+function readLongReturn(): LongReturnState | null {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(LONG_RETURN_KEY) || 'null')
+    const valid = !!s && typeof s === 'object' && typeof s.path === 'string' && isWholeNumber(s.videoId, 1)
+      && (s.category === null || isWholeNumber(s.category, 1))
+      && Array.isArray(s.categories) && s.categories.every((c: unknown) => !!c && typeof c === 'object' && isWholeNumber((c as { id: unknown }).id, 1) && typeof (c as { name: unknown }).name === 'string')
+      && Array.isArray(s.items) && s.items.every((v: unknown) => !!v && typeof v === 'object' && isWholeNumber((v as { id: unknown }).id, 1))
+      && isWholeNumber(s.page, 1) && typeof s.more === 'boolean' && Number.isFinite(s.top) && s.top >= 0 && Number.isFinite(s.savedAt)
+    return valid ? s as LongReturnState : null
+  } catch {
+    return null
+  }
+}
+function restoreLongList() {
+  if (!routeReachedByHistory()) return false
+  const saved = readLongReturn()
+  const forward = (window.history.state as { forward?: unknown } | null)?.forward
+  const age = saved ? Date.now() - saved.savedAt : Number.POSITIVE_INFINITY
+  if (!saved || saved.path !== longListPath || forward !== `/video/${saved.videoId}` || age < 0 || age > LONG_RETURN_TTL) return false
+  if (saved.categories.length) categories.value = saved.categories
+  selected.value = displayedCategory.value = saved.category
+  videos.value = saved.items
+  page.value = saved.page
+  more.value = saved.more
+  restoreLongScroll(saved.top)
+  return true
+}
+// Waits until the grid is tall enough, then sets the scroll position; gives up after 1.5 s and
+// stops as soon as the user touches, scrolls with a wheel, clicks or types.
+function restoreLongScroll(top: number) {
+  const area = scrollArea.value
+  if (!area || top <= 0) return
+  const inputs = ['touchstart', 'wheel', 'pointerdown', 'keydown'] as const
+  const until = performance.now() + 1500
+  let stopped = false
+  const stop = () => {
+    stopped = true
+    for (const type of inputs) area.removeEventListener(type, stop)
+  }
+  for (const type of inputs) area.addEventListener(type, stop, { passive: true })
+  const step = () => {
+    if (stopped || disposed || !area.isConnected) return stop()
+    const max = area.scrollHeight - area.clientHeight
+    if (max >= top - 1) {
+      area.scrollTop = top
+      if (Math.abs(area.scrollTop - top) <= 1) return stop()
+    }
+    if (performance.now() >= until) {
+      area.scrollTop = Math.min(top, Math.max(0, max))
+      return stop()
+    }
+    requestAnimationFrame(step)
+  }
+  void nextTick(() => requestAnimationFrame(step))
+}
+onBeforeUnmount(() => {
+  if (props.kind !== 'long') return
+  // The router has already switched to the next route when the list unmounts.
+  const next = router.currentRoute.value
+  const id = Number(next.params.id)
+  if (next.name === 'video-detail' && isWholeNumber(id, 1)) saveLongReturn(id)
+})
+// Back goes to the page that opened this list; a list opened directly falls back to the category home.
+function goBackFromLongList() {
+  if ((window.history.state as { back?: unknown } | null)?.back) router.back()
+  else router.replace({ name: 'long', state: { videoFrom: undefined } })
+}
 </script>
 
 <template>
-  <section class="discovery-page" :aria-label="kind === 'short' ? '短视频发现' : '长视频发现'">
+  <section class="discovery-page" :class="{ 'long-list': kind === 'long' }" :aria-label="kind === 'short' ? '短视频发现' : '长视频发现'">
     <div class="discovery-browse" :inert="playerIndex !== null || undefined">
     <header class="discovery-header">
-      <button class="feed-icon" aria-label="打开我的页面" @click="router.push('/me')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
+      <button v-if="kind === 'long'" class="feed-icon" aria-label="返回" @click="goBackFromLongList"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+      <button v-else class="feed-icon" aria-label="打开我的页面" @click="router.push('/me')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
       <nav class="feed-tabs" aria-label="视频频道">
-        <button class="selected" aria-current="page">短视频</button>
+        <button class="selected" aria-current="page">{{ kind === 'long' ? '长视频' : '短视频' }}</button>
       </nav>
       <button class="feed-icon" :aria-expanded="searching" aria-label="搜索视频" @click="searching = !searching"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7.5" /><path d="m16 16 5 5" /></svg></button>
     </header>
@@ -479,19 +562,20 @@ onMounted(() => {
       <input v-model="query" aria-label="搜索视频标题或作者" placeholder="搜索视频、作者" type="search" />
       <button type="button" @click="query = ''; searching = false">取消</button>
     </form>
-    <CategoryStrip :categories="categories" :model-value="kind === 'short' ? displayedCategory : selected" @update:model-value="selectCategory" />
+    <CategoryStrip v-if="kind === 'short'" :categories="categories" :model-value="displayedCategory" @update:model-value="selectCategory" />
     <div ref="scrollArea" class="discovery-scroll touch-pan-y overflow-x-hidden"
       @touchstart.passive="startCategorySwipe" @touchmove.passive="trackCategorySwipe"
       @touchend.passive="endCategorySwipe" @touchcancel.passive="cancelCategorySwipe">
       <TransitionGroup tag="div" name="category-slide" class="relative category-track" :class="{ 'category-preview': previewing, 'category-returning': previewing && dragOffset === 0 }"
         :style="{ '--category-slide-direction': slideDirection, '--category-release': releaseOffset + 'px', '--category-drag': dragOffset + 'px', '--category-preview-direction': dragDirection }">
-        <div v-for="grid in grids" :key="grid.key" class="video-grid short-masonry" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[{ 'long-grid': kind === 'long', 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
-          <VideoCard v-for="video in grid.items" v-masonry-tile="true" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="showsShortVideos ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" :layout="kind === 'long' ? 'horizontal' : 'vertical'" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
-          <template v-if="!grid.items.length && ((kind === 'long' && (!query || error || loading)) || (kind === 'short' && (grid.hidden || loading)))"><div v-for="n in 4" :key="'placeholder-' + n" class="video-skeleton" /></template>
+        <div v-for="grid in grids" :key="grid.key" class="video-grid" :aria-busy="loading" :inert="grid.hidden || undefined" :class="[kind === 'long' ? 'long-cards' : 'short-masonry', { 'absolute inset-x-0 top-0 h-0 overflow-hidden invisible': grid.hidden, 'category-slide-current': !grid.hidden && slideDirection !== 0, 'category-preview-incoming': grid.hidden && previewing }]">
+          <VideoCard v-for="video in grid.items" v-masonry-tile="kind !== 'long'" :key="video.id" :video="video" :hide-pending-cover="kind === 'short'" :eager-cover="grid.coverIds.has(video.id) || !!returnCovers[video.id]" :cached-cover="showsShortVideos ? returnCovers[video.id] : undefined" :cover-ratio="returnRatios[video.id]" layout="vertical" :variant="kind === 'long' ? 'long' : undefined" @cover-settled="coverSettled(grid.key, video.id)" @click="open(video, $event)" />
+          <template v-if="!grid.items.length && ((kind === 'long' && (grid.hidden || loading)) ||(kind === 'short' && (grid.hidden || loading)))"><div v-for="n in 4" :key="'placeholder-' + n" class="video-skeleton" /></template>
         </div>
       </TransitionGroup>
       <div v-if="error && kind === 'short'" class="feed-empty" role="alert"><p>{{ error }}</p><button @click="load(retryAppend)">重新加载</button></div>
-      <div v-else-if="!loading && !visible.length && (kind === 'short' || (query && !error))" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : '换个分类看看，或稍后再来' }}</span></div>
+      <div v-else-if="error && kind === 'long'" class="feed-empty" role="alert"><p>加载失败</p><button @click="load(retryAppend)">点击重试</button></div>
+      <div v-else-if="!loading && !visible.length && (kind === 'short' || !error)" class="feed-empty"><p>{{ query ? '没有找到匹配的视频' : kind === 'long' ? '暂无视频' : '这里还没有视频' }}</p><span>{{ query ? '试试其他标题或作者' : kind === 'long' ? '该分类暂时没有视频' : '换个分类看看，或稍后再来' }}</span></div>
       <div v-if="(kind === 'short' || (kind === 'long' && previewShortsInLongTab)) && autoLoad && more && !error && !query && playerIndex === null">
         <p v-if="loading" class="sr-only" role="status">加载中…</p>
         <div v-else ref="nextPageMarker" class="h-px" aria-hidden="true" />
@@ -508,6 +592,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Long list: two portrait cards per row, fixed 2:3 cover; a missing or failed cover is plain grey. */
+.long-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 4px; align-items: stretch; }
+.long-cards :deep(.video-tile) { display: flex; flex-direction: column; justify-content: flex-start; }
+.long-cards :deep(.video-poster) { flex: none; aspect-ratio: 2 / 3; background: #e9e9e9; }
+.long-cards .video-skeleton { aspect-ratio: 2 / 3; background: #e9e9e9; }
 .category-track {
   --category-gap: 4px;
 }

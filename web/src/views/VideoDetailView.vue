@@ -1,99 +1,111 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { mediaUrl } from '@/utils/media-url'
 import { videoApi } from '@/api/video'
-import type { Video, Comment } from '@/types/models'
+import LongVideoPlayer from '@/components/LongVideoPlayer.vue'
+import type { Video } from '@/types/models'
 
 const route = useRoute()
 const router = useRouter()
-const id = Number(route.params.id)
+const id = computed(() => Number(route.params.id))
 const video = ref<Video | null>(null)
-const comments = ref<Comment[]>([])
-const commentText = ref('')
-const commentsEnabled = ref(false)
+const failed = ref(false)
+// 更多推荐: other videos of the same category from the existing list API (no recommendation logic).
+const more = ref<Video[]>([])
+const moreState = ref<'loading' | 'ready' | 'failed'>('loading')
+const brokenCovers = ref<Record<number, boolean>>({})
+const scroller = ref<HTMLElement | null>(null)
+let generation = 0
+
+const published = computed(() => {
+  const value = video.value?.published_at
+  const date = value ? new Date(value) : null
+  return date && !Number.isNaN(date.getTime())
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    : ''
+})
+
+// A video opened from 我的视频 marks its history entry (videoFrom: 'me') so the bottom bar keeps
+// 我 highlighted; a video opened from 更多推荐 inherits that mark.
+function openMore(target: number) {
+  const from = (window.history.state as { videoFrom?: unknown } | null)?.videoFrom
+  router.push({ name: 'video-detail', params: { id: target }, state: from === 'me' ? { videoFrom: 'me' } : undefined })
+}
+
+function duration(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+}
 
 async function load() {
-  video.value = await videoApi.show(id)
-  const res = await videoApi.comments(id, 1)
-  comments.value = res.data ?? (res as any)
-}
-
-async function like() {
-  if (!video.value) return
-  const res = await videoApi.like(video.value.id)
-  video.value.likes = (res as any).likes ?? video.value.likes
-}
-
-async function sendComment() {
-  if (!commentsEnabled.value) return
-  const text = commentText.value.trim()
-  if (!text || !video.value) return
+  const request = ++generation
+  const current = id.value
+  failed.value = false
+  video.value = null
+  more.value = []
+  moreState.value = 'loading'
   try {
-    const c = await videoApi.createComment(video.value.id, text)
-    comments.value.unshift(c)
-    commentText.value = ''
-  } catch (e: any) {
-    alert(e.response?.data?.error || '发送失败')
+    const result = await videoApi.show(current)
+    if (request !== generation) return
+    video.value = result
+    if (scroller.value) scroller.value.scrollTop = 0
+  } catch {
+    if (request === generation) failed.value = true
+    return
+  }
+  try {
+    const list = await videoApi.list({ type: 'long', category_id: video.value.category_id, page: 1, per_page: 12 })
+    if (request !== generation) return
+    more.value = (list.data ?? []).filter(item => item.id !== current).slice(0, 10)
+    moreState.value = 'ready'
+  } catch {
+    if (request === generation) moreState.value = 'failed'
   }
 }
 
-onMounted(() => {
-  void load()
-  void fetch('/api/video-comments/settings', { cache: 'no-store' })
-    .then(response => response.ok ? response.json() : null)
-    .then(data => { commentsEnabled.value = data?.enabled === true })
-    .catch(() => { commentsEnabled.value = false })
-})
+watch(id, () => { void load() }, { immediate: true })
 </script>
 
 <template>
-  <div v-if="video" class="flex flex-col h-full">
+  <div class="flex flex-col h-full bg-white">
     <header class="flex-none px-3 py-3 border-b border-gray-200 safe-top flex items-center gap-3">
-      <button class="text-2xl" @click="router.back()">‹</button>
-      <h1 class="text-base font-semibold flex-1 truncate">{{ video.title }}</h1>
+      <button class="text-2xl" aria-label="返回" @click="router.back()">‹</button>
     </header>
 
-    <!-- 整体可滚动区域：视频 + 信息 + 评论 -->
-    <div class="flex-1 overflow-y-auto">
-      <video :poster="mediaUrl(video.cover) || undefined" :src="video.url" controls autoplay class="w-full bg-black aspect-video" />
+    <div v-if="failed" class="feed-empty" role="alert"><p>视频加载失败</p><button @click="load">点击重试</button></div>
+
+    <div v-else-if="video" ref="scroller" class="flex-1 overflow-y-auto">
+      <LongVideoPlayer :key="video.id" :src="video.url" :poster="mediaUrl(video.cover) || undefined" :title="video.title" />
 
       <div class="px-4 py-3 border-b border-gray-200">
         <h2 class="font-semibold">{{ video.title }}</h2>
-        <p class="text-sm text-gray-600 mt-1">{{ video.user?.name }} · {{ video.views }} 次观看</p>
-        <div class="flex gap-3 mt-3">
-          <button class="px-4 py-1.5 rounded-full bg-gray-100 text-sm" @click="like">❤ {{ video.likes }}</button>
-          <span class="px-4 py-1.5 rounded-full bg-gray-100 text-sm">💬 {{ video.comments_count }}</span>
-        </div>
-        <p v-if="video.description" class="text-sm text-gray-600 mt-3 whitespace-pre-line">{{ video.description }}</p>
+        <p class="text-sm text-gray-600 mt-1">{{ video.views }} 次播放<template v-if="published"> · {{ published }}</template></p>
       </div>
 
-      <div class="px-4 py-3">
-        <h3 class="text-sm text-gray-600 mb-2">评论 ({{ comments.length }})</h3>
-        <div v-if="!comments.length" class="text-center text-gray-500 py-8 text-sm">还没有评论</div>
-        <div v-for="c in comments" :key="c.id" class="py-3 border-b border-gray-200 last:border-0">
-          <div class="flex gap-3">
-            <img
-              :src="c.user?.avatar || `https://ui-avatars.com/api/?name=${c.user?.name}`"
-              class="w-9 h-9 rounded-full flex-shrink-0"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium">{{ c.user?.name }}</p>
-              <p class="text-sm text-gray-600 mt-1 break-words">{{ c.content }}</p>
-            </div>
-          </div>
+      <section class="py-3" aria-label="更多推荐">
+        <h3 class="px-4 mb-2 text-sm font-semibold">更多推荐</h3>
+        <div v-if="moreState === 'loading'" class="more-row" aria-busy="true"><div v-for="n in 3" :key="n" class="more-card"><span class="more-cover" /></div></div>
+        <p v-else-if="moreState === 'failed'" class="px-4 text-sm text-gray-500">推荐加载失败</p>
+        <p v-else-if="!more.length" class="px-4 text-sm text-gray-500">暂无推荐</p>
+        <div v-else class="more-row">
+          <button v-for="item in more" :key="item.id" class="more-card" :aria-label="`播放：${item.title}`" @click="openMore(item.id)">
+            <span class="more-cover">
+              <img v-if="item.cover && !brokenCovers[item.id]" :src="mediaUrl(item.cover)" alt="" loading="lazy" @error="brokenCovers[item.id] = true" />
+              <span v-if="item.duration" class="video-duration">{{ duration(item.duration) }}</span>
+            </span>
+            <span class="more-title">{{ item.title }}</span>
+          </button>
         </div>
-      </div>
-    </div>
-
-    <div v-if="commentsEnabled" class="flex-none border-t border-gray-200 p-2 flex gap-2 safe-bottom">
-      <input
-        v-model="commentText"
-        placeholder="说点什么…"
-        class="flex-1 px-4 py-2 rounded-full bg-gray-50 outline-none"
-        @keyup.enter="sendComment"
-      />
-      <button class="px-4 py-2 rounded-full bg-primary text-white" @click="sendComment">发送</button>
+      </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+.more-row { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px; scroll-padding-inline: 16px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.more-row::-webkit-scrollbar { display: none; }
+.more-card { flex: 0 0 42%; max-width: 200px; min-width: 0; text-align: left; scroll-snap-align: start; }
+.more-cover { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 6px; background: #e8e8e8; }
+.more-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.more-title { display: -webkit-box; margin-top: 6px; font-size: 13px; line-height: 1.35; color: var(--ink); overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+</style>

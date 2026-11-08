@@ -1,4 +1,4 @@
 <script setup lang="ts">
-import VideoDiscovery from '@/components/VideoDiscovery.vue'
+import LongCategoryHome from '@/components/LongCategoryHome.vue'
 </script>
-<template><VideoDiscovery kind="long" /></template>
+<template><LongCategoryHome /></template>

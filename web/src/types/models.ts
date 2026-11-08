@@ -46,6 +46,7 @@ export interface Video {
   views: number
   likes: number
   comments_count: number
+  published_at?: string | null
   user: User | null
 }
 
