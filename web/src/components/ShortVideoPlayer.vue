@@ -20,31 +20,114 @@ const emit = defineEmits<{ close: []; likesChanged: [id: number, count: number] 
 const videos = ref<ShortVideo[]>(props.items)
 const currentIdx = ref(props.initialIndex)
 const isAndroid = /Android/i.test(navigator.userAgent)
-let androidSwipe: { x: number; y: number; index: number; active: boolean } | undefined
+let androidSwipe: { x: number; y: number; index: number; active: boolean; id: number; target: EventTarget | null } | undefined
+let androidState: 'idle' | 'dragging' | 'settling' = 'idle'
+let androidFrame = 0
+let pendingSwipeClick: { id: number; target: EventTarget | null } | undefined
+let androidPreviousSnap = ''
+let androidSettle: { element: HTMLElement; top: number; index: number } | undefined
+let stopAndroidForwarding: (() => void) | undefined
+function resetAndroidSwipe() {
+  cancelAnimationFrame(androidFrame)
+  androidFrame = 0
+  androidSwipe = undefined
+  androidSettle = undefined
+  stopAndroidForwarding?.()
+  stopAndroidForwarding = undefined
+  androidState = 'idle'
+  if (containerRef.value) containerRef.value.style.scrollSnapType = androidPreviousSnap
+  androidPreviousSnap = ''
+}
+// Lands the running settle animation on its video and makes that video current.
+function finishAndroidSettle() {
+  const settle = androidSettle
+  if (settle && containerRef.value === settle.element) {
+    settle.element.scrollTop = settle.top
+    currentIdx.value = settle.index
+  }
+  resetAndroidSwipe()
+}
 function androidSwipeStart(event: TouchEvent) {
-  if (!isAndroid || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('button,input,textarea,a'))) return
+  if (!isAndroid) return
+  // A click caused by the preceding touch, if any, precedes the next touchstart.
+  pendingSwipeClick = undefined
+  // A new swipe while the previous one is still landing: complete that switch first.
+  const finished = androidState === 'settling'
+  if (finished) finishAndroidSettle()
+  // A new single touch while a drag is still open means its touchend was lost: back to its video.
+  else if (androidState === 'dragging' && event.touches.length === 1) {
+    if (containerRef.value) containerRef.value.scrollTop = currentIdx.value * containerRef.value.clientHeight
+    resetAndroidSwipe()
+  }
+  if (androidState !== 'idle' || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input[type="range"]'))) return
   const touch = event.touches[0]
   if (touch.clientX < 32) return
-  androidSwipe = { x: touch.clientX, y: touch.clientY, index: currentIdx.value, active: false }
+  androidSwipe = { x: touch.clientX, y: touch.clientY, index: currentIdx.value, active: false, id: touch.identifier, target: event.target }
+  // Completing the switch can unmount the element under the finger (an HLS video or a control of
+  // the previous video); its touches then no longer reach the feed, so forward them while detached.
+  const node = event.target
+  if (finished && node instanceof Node) {
+    const forward = (e: Event) => {
+      if (node.isConnected) return
+      if (e.type === 'touchmove') androidSwipeMove(e as TouchEvent)
+      else androidSwipeEnd(e as TouchEvent)
+    }
+    const types = ['touchmove', 'touchend', 'touchcancel']
+    types.forEach(type => node.addEventListener(type, forward, { passive: false }))
+    stopAndroidForwarding = () => types.forEach(type => node.removeEventListener(type, forward))
+  }
 }
 function androidSwipeMove(event: TouchEvent) {
-  if (!androidSwipe || event.touches.length !== 1 || !containerRef.value) return
+  if (!androidSwipe || !containerRef.value) return
+  if (event.touches.length !== 1) return androidSwipeEnd(event, true)
   const touch = event.touches[0]
   const dy = androidSwipe.y - touch.clientY
-  if (!androidSwipe.active && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(touch.clientX - androidSwipe.x) * 1.5) androidSwipe.active = true
+  if (!androidSwipe.active && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(touch.clientX - androidSwipe.x) * 1.5) {
+    androidSwipe.active = true
+    androidState = 'dragging'
+    androidPreviousSnap = containerRef.value.style.scrollSnapType
+    containerRef.value.style.scrollSnapType = 'none'
+  }
   if (!androidSwipe.active) return
   event.preventDefault()
   const height = containerRef.value.clientHeight
   containerRef.value.scrollTop = androidSwipe.index * height + Math.max(-height, Math.min(height, dy))
 }
-function androidSwipeEnd(event: TouchEvent) {
+function androidSwipeEnd(event: TouchEvent, cancelled = false) {
   const swipe = androidSwipe
   androidSwipe = undefined
+  stopAndroidForwarding?.()
+  stopAndroidForwarding = undefined
+  if (cancelled || event.type === 'touchcancel') pendingSwipeClick = undefined
   if (!swipe?.active || !containerRef.value) return
+  if (!cancelled && event.type !== 'touchcancel') pendingSwipeClick = { id: swipe.id, target: swipe.target }
   const dy = swipe.y - (event.changedTouches[0]?.clientY ?? swipe.y)
-  const direction = Math.abs(dy) > 55 ? Math.sign(dy) : 0
+  const direction = !cancelled && event.type !== 'touchcancel' && Math.abs(dy) > 55 ? Math.sign(dy) : 0
   const index = Math.max(0, Math.min(videos.value.length - 1, swipe.index + direction))
-  containerRef.value.scrollTo({ top: index * containerRef.value.clientHeight, behavior: 'smooth' })
+  const element = containerRef.value
+  const from = element.scrollTop
+  const target = index * element.clientHeight
+  const start = performance.now()
+  androidState = 'settling'
+  androidSettle = { element, top: target, index }
+  const animate = (now: number) => {
+    if (containerRef.value !== element) return resetAndroidSwipe()
+    const progress = Math.min(1, (now - start) / 180)
+    element.scrollTop = from + (target - from) * (1 - Math.pow(1 - progress, 3))
+    if (progress < 1) androidFrame = requestAnimationFrame(animate)
+    else finishAndroidSettle()
+  }
+  androidFrame = requestAnimationFrame(animate)
+}
+function androidSwipeClick(event: MouseEvent) {
+  const pending = pendingSwipeClick
+  if (!isAndroid || !pending || event.detail === 0) return
+  pendingSwipeClick = undefined
+  const pointerType = typeof PointerEvent !== 'undefined' && event instanceof PointerEvent ? event.pointerType : ''
+  if (pointerType && pointerType !== 'touch') return
+  if (pending.target && !event.composedPath().includes(pending.target)) return
+  event.preventDefault()
+  event.stopPropagation()
 }
 const containerRef = ref<HTMLElement | null>(null)
 const states = ref<Record<number, { liked: boolean; favorited: boolean }>>({})
@@ -173,7 +256,12 @@ function warmCovers() {
 }
 
 function suspendPlayback() {
+  pendingSwipeClick = undefined
   if (suspended) return
+  if (androidState !== 'idle' && containerRef.value) {
+    containerRef.value.scrollTop = currentIdx.value * containerRef.value.clientHeight
+    resetAndroidSwipe()
+  }
   suspended = true
   resumePlaying = !manuallyPaused
   clearTimeout(backTimer)
@@ -239,6 +327,7 @@ function setupObserver() {
   observer?.disconnect()
   if (!containerRef.value) return
   observer = new IntersectionObserver(entries => {
+    if (isAndroid && androidState !== 'idle') return
     for (const e of entries) {
       if (e.isIntersecting && e.intersectionRatio > 0.7) {
         const idx = Number((e.target as HTMLElement).dataset.idx)
@@ -647,6 +736,8 @@ onMounted(async () => {
   containerRef.value?.parentElement?.querySelector<HTMLButtonElement>('.player-close')?.focus()
 })
 onUnmounted(() => {
+  pendingSwipeClick = undefined
+  resetAndroidSwipe()
   disposed = true
   clearInterval(interactionTimer)
   interactionVersion++
@@ -674,7 +765,7 @@ onUnmounted(() => {
     @touchstart.passive="startBack" @touchmove="moveBack" @touchend.passive="endBack" @touchcancel.passive="cancelBack">
     <button class="player-close" aria-label="返回视频列表" @click="zoomBack">‹</button>
 
-    <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory" :class="{ 'android-feed': isAndroid }" @touchstart.passive="androidSwipeStart" @touchmove="androidSwipeMove" @touchend.passive="androidSwipeEnd" @touchcancel.passive="androidSwipeEnd">
+    <div ref="containerRef" class="min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory" :class="{ 'android-feed': isAndroid }" @click.capture="androidSwipeClick" @touchstart.passive="androidSwipeStart" @touchmove="androidSwipeMove" @touchend.passive="androidSwipeEnd" @touchcancel.passive="androidSwipeEnd">
       <section
         v-for="(v, idx) in videos"
         :key="v.id"
