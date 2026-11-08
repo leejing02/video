@@ -1,11 +1,14 @@
 # 当前进度
 
-更新日期：2026-11-07。只记录可核实的状态；本文件与代码或 Git 不一致时，以代码和 Git 为准并先修正本文件。
+更新日期：2026-11-07（长视频 V1 部分 2026-11-08）。只记录可核实的状态；本文件与代码或 Git 不一致时，以代码和 Git 为准并先修正本文件。
 状态分四层分别记录：本地已提交 → GitHub 已推送 → 服务器已部署 → 手机已验收。
 
 ## 最新状态摘要（2026-11-07 晚核对，以本节为准）
 
 本节是当前状态；下方各节是按时间记录的历史，与本节冲突时以本节为准。提交、推送、部署、线上验证分开记录，不能用「已提交」或「接口存在」推断功能已验证。
+
+**长视频 V1（2026-11-08，另一分支，详见文末「2026-11-08 长视频 V1」）**
+- 分支 `claude/nav-category-recommend`（基于 `4f2a733`）本地提交 `6005351`（功能）和 `864a41a`（E2E 测试）；均未推送、未合并、未部署。下方「Git」一节描述的是整合分支，不包含这些提交。
 
 **Git（已确认）**
 - 分支 `codex/social-chat-integration-20261103`，HEAD `1fc2f3a`，已推送（`origin/codex/social-chat-integration-20261103` 包含该提交）。
@@ -249,3 +252,53 @@
 - 状态汇总（11-07 晚）：第一个视频先停在播放按钮、点播放有声音——用户真机已确认（`fe1e6df`）；第二个视频声音——待真机验证（`1fc2f3a`）；播放页顶部 #000000 与返回按钮——本地已验证，部署后真机未复查。「iPhone 第一个视频先显示播放按钮」待真机确认后再考虑写入 UI-RULES.md。
 
 - 11-08 安卓滑动：Pixel 7 Chromium 模拟长距离快速滑动可从第 1 条跳到第 3 条；本地加入仅安卓单次手势最多切换一条，模拟前后向落点为第 2 条和第 1 条。构建及 7 项 Chromium 测试通过，安卓真机闪动和手感待验证；尚未同步。
+
+## 2026-11-08 底部导航与长短视频页面分离（第一阶段；已随 `6005351` 提交，部分描述已过时）
+
+> 更新（11-08 晚）：本节是第一阶段当时的记录，保留作历史。这些改动及后续长视频页面已在本地提交为 `6005351`（未推送）。`/long` 的行为、分类栏等描述已被下方「2026-11-08 长视频 V1」取代，以那一节为准。
+
+- 分支 `claude/nav-category-recommend`（独立 worktree `.worktrees/nav-category-recommend`，基于 `4f2a733`）；未提交、未推送、未部署。
+- 底部导航改为：分类（`/long`）｜推荐（`/short`）｜＋（`/upload`）｜群聊（`/chat`）｜我（`/me`）。
+- `/short` 恢复为原短视频列表页 `ShortVideoView.vue`（不再跳转 `/long`）；`/long` 恢复为长视频页。
+  - 更正（11-08 晚）：现在 `/long` 是分类首页，视频列表在 `/long/category/:id`，见下方「长视频 V1」。
+- `VideoDiscovery.vue`：`previewShortsInLongTab` 改为 `false`（长视频页不再借用短视频数据）；`hideDiscoveryVideos` 改为 `false`（短视频列表恢复加载和展示）；页面顶部标题按页面显示「长视频」或「短视频」。
+- 未改动：`ShortVideoPlayer.vue`、`ShortPlaybackView.vue`、安卓/iOS 滑动逻辑、后台、数据库、部署配置；API 只改了 `models.go`（见下方长视频接口 500 修复）。
+- 本地验证：`vue-tsc`、`vite build` 通过；原有播放器回归测试 52 项通过、2 项跳过；模拟 iPhone 和 Pixel 7 检查五个底部入口、`/long` 只请求 `/api/videos?type=long` 和 `/api/categories?kind=long`、`/short` 只请求 `/api/short-videos`。
+- 本地测试接口（8443 设备测试环境，非生产）：`/short` 请求 `/api/short-videos` 返回 200，列表显示 10 条；`/long` 的 `/api/categories?kind=long` 返回空数组，`/api/videos?type=long` 返回 500（见下）。
+- 长视频接口 500 修复（用户批准方案 A，未提交）：原因是 `Video` 结构缺少 `videos` 表的 7 列（`cover_source`、`md5`、`size_bytes`、`audit_status`、`audit_note`、`audited_by`、`audited_at`），长视频列表和详情查询 `v.*` 报 `missing destination name`，返回 500。修复只在 `api/internal/models/models.go` 的 `Video` 末尾补齐这 7 个字段，类型按测试库实际列和 `schema.sql`，全部 `json:"-"`，接口 JSON 字段与修改前一致；未改查询、Handler、数据库和迁移。
+  - 验证：`go build`、`go vet`、`go test` 通过；按完整列清单离线检查 sqlx 映射，列表和详情查询均无未映射列；用补丁版 API 在隔离容器中连接本地测试库（只读请求，测试表校验和前后一致，未改 8443/9443/10443），`/api/videos?type=long` 返回 200（测试库无长视频，结果为空），`/api/short-videos` 正常；前端 `/long`、`/short` 请求与展示正常。
+  - 待核对：生产数据库 `videos` 表是否有相同的列；生产环境长视频接口实际表现。
+- 未完成：真机验证；长视频分类栏仍为固定的「国产、精选、抖舞、猎奇、99」按名称匹配后台长视频分类；第二阶段（长视频与云转码同步）未开始。
+  - 更正（11-08 晚）：固定分类栏的描述已过时——长视频列表现在没有分类标签栏，分类来自 `/api/categories?kind=long`，见下方「长视频 V1」。
+
+## 2026-11-08 长视频 V1（本地已提交，未推送）
+
+**Git**
+- 分支 `claude/nav-category-recommend`（worktree `.worktrees/nav-category-recommend`），基于 `4f2a733`。
+- `6005351` `feat(long-video): add category browsing and mobile player`：功能。
+- `864a41a` `test(long-video): add e2e coverage for category, restore and player`：E2E 测试与测试视频。
+- 均为本地提交：未推送、未合并、未部署。
+
+**功能（以代码为准）**
+- 底部导航：分类（`/long`）｜推荐（`/short`）｜＋（`/upload`）｜群聊（`/chat`）｜我（`/me`）。
+- `/long` 分类首页（`LongCategoryHome.vue`）：读取 `/api/categories?kind=long`；双列 16:9 分类封面；标题「长视频」居中，第一版无菜单按钮；分类名 18px、600 字重、居中、可换行，同排封面顶部对齐；点击进入 `/long/category/:id`。
+- `/long/category/:id` 分类列表（`VideoDiscovery.vue` 长视频分支）：只请求 `/api/videos?type=long&category_id=…`，不请求分类接口；不显示分类标签栏，横向滑动不切换分类；标题固定「长视频」，保留搜索；双列竖版 2:3 卡片（横向 4px、纵向 6px），缺失封面为灰色占位、保留时长角标；空状态「暂无视频 / 该分类暂时没有视频」；左上角返回按钮有上一页时 `router.back()`，直接打开时回到 `/long`。
+- 返回恢复：列表离开到 `/video/:id` 时，把列表路径、视频 ID、分类、已加载视频、页码、是否还有更多、滚动位置、保存时间写入 sessionStorage `long-list-return`（超过 200 万字符不保存）。只有经由浏览器历史回到列表（返回按钮、浏览器返回；路由层判断），且 `history.state.forward` 正是该视频、路径一致、30 分钟内、数据有效时才恢复，并且不重新请求；刷新、直接打开、缓存损坏或过期、写入失败时正常加载。
+- `/video/:id`（`VideoDetailView.vue`）：不显示简介、作者、点赞、评论和评论输入框；显示标题、播放量、发布日期；「更多推荐」为同分类其他视频（现有列表接口，最多 10 条），没有时显示「暂无推荐」。
+- 播放器 `LongVideoPlayer.vue`：`playsinline` / `webkit-playsinline`；自定义控制条（播放/暂停、当前时间、进度、总时长、倍速 1.0×/1.25×/1.5×/2.0×、全屏），点击画面显示/隐藏，播放约 3 秒自动隐藏；iPhone 点全屏调用系统原生全屏（`webkitEnterFullscreen`，交给 iOS 控制条）；支持页面元素全屏的浏览器（Android Chrome）对播放器调用 `requestFullscreen`，并尝试 `screen.orientation.lock('landscape')`，全屏时隐藏底部导航。第一版以 MP4 为目标。
+- 底部高亮：从「我的视频」打开的详情在历史记录里带 `videoFrom: 'me'`，高亮「我」（更多推荐会继承）；其他情况（含直接打开详情）高亮「分类」；底部导航切换时清除 `videoFrom`。
+- API：`api/internal/models/models.go` 的 `Video` 补齐 `videos` 表 7 列（`json:"-"`），即此前批准的长视频接口 500 修复；没有数据库迁移。
+
+**验证（模拟环境，不是真机验收）**
+- 提交 `864a41a` 时：`npm run test:e2e` 共 137 项通过、11 项跳过、0 失败（项目 `iphone-chromium`、`iphone-webkit`）。其中新增长视频测试 85 项通过、9 项按平台跳过；原有短视频播放器测试 52 项通过、2 项跳过，与之前相同。`vue-tsc`、`vite build` 通过。功能提交时 Go `build`、`vet`、`test` 通过。
+- 测试视频 `web/e2e/fixtures/media/test-landscape.mp4`（8 秒、640×360、H.264）由同目录 `generate-test-video.swift` 生成。
+- 全屏、方向锁定、iPhone 原生全屏在测试中以 stub 代替，只证明调用顺序和降级逻辑，不能证明真机行为。
+
+**未完成 / 待验证**
+- iPhone Safari 真机：页面内播放不自动进入系统全屏、系统全屏及方向、退出后状态。
+- Android Chrome 真机：横屏锁定、全屏、全屏时系统返回键。
+- 真机安全区（刘海、圆角、手势区）和地址栏伸缩。
+- 真实长视频数据：本地测试库没有长视频分类和长视频；生产库 `videos` 表的列与长视频接口实际表现**未核对**。
+- Android 播放 M3U8（hls.js）、EFV 播放签名与加密封面均未接入。
+- EFV：「精品无码」（type_id=3）接入停在只读核查阶段——生产库只读检查命令尚未执行并反馈；分类映射、`videos.efv_id`、同步命令均未实施。
+- 本地 8443 设备测试环境的 API 仍是 `ebf6548` 镜像，长视频接口在该环境会返回 500（未重建）。

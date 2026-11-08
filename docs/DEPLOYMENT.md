@@ -53,6 +53,16 @@ $C exec admin php artisan efv:refresh-covers
 
 `efv:refresh-covers` 把已发布 EFV 短视频的封面1 地址写入数据库并更新本站副本；只处理单条时末尾加 `--video=1027`。前台约 90 秒内（Go 元数据缓存刷新）生效。
 
+## 长视频 V1 部署提醒（2026-11-08，尚未部署）
+
+本节只是提醒；本次没有执行任何部署。
+
+- 功能提交 `6005351`（分支 `claude/nav-category-recommend`）同时改了 `web/` 和 `api/`（`api/internal/models/models.go`）。目前只是本地提交，未推送、未合并到服务器分支 `codex/social-chat-integration-20261103`；上面的更新命令只快进服务器当前分支，合并和推送方式需用户先决定。
+- 合入后，更新命令会按改动目录同时重建 `api` 和 `web`。部署后核对两个服务来自同一提交；前端的长视频分类、列表、详情页依赖新版 api 正常返回 `/api/videos`。
+- 本次**没有数据库迁移**，不需要也不要运行 `php artisan migrate`。
+- `models.go` 的修复依赖数据库实际结构：`Video` 结构补齐了 `videos` 表的 7 列（`cover_source`、`md5`、`size_bytes`、`audit_status`、`audit_note`、`audited_by`、`audited_at`），供 `SELECT v.*` 映射。生产库 `videos` 表如果还有这 7 列以外、结构里没有的列，长视频列表和详情仍会返回 500；缺少其中某列则不会因此报错。
+- 生产库 `videos` 表的实际列**尚未确认**。部署前应先只读核查（`information_schema.COLUMNS`），不要假设字段已全部确认。
+
 ## 回滚
 
 服务器上 `git log --oneline` 找到上一个可用提交，在**新分支**上检出后按上面的重建命令重建对应服务；不改写远程历史。（待用户确认回滚流程）
