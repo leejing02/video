@@ -136,7 +136,8 @@ jobs:
 
   web-e2e:
     name: Web player UI regression (Playwright)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright 1.59.1 cannot install browsers on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
