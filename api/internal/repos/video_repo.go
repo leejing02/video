@@ -110,10 +110,10 @@ func (r *VideoRepo) FindByID(id int64) (*models.VideoWithRelations, error) {
 		USnm string  `db:"u_username"`
 		UAv  *string `db:"u_avatar"`
 
-		CID  int64   `db:"c_id"`
-		CNm  string  `db:"c_name"`
-		CSlg string  `db:"c_slug"`
-		CKnd string  `db:"c_kind"`
+		CID  int64  `db:"c_id"`
+		CNm  string `db:"c_name"`
+		CSlg string `db:"c_slug"`
+		CKnd string `db:"c_kind"`
 	}{}
 	q := `
 		SELECT
