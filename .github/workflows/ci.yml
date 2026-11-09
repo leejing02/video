@@ -76,7 +76,7 @@ jobs:
 
   ios:
     name: iOS（仅静态检查）
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
