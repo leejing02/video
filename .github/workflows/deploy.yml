@@ -1,9 +1,21 @@
 name: Deploy
 
+# Production deployment is manual only (workflow_dispatch from main, typed confirmation,
+# protected "production" environment). The former push-to-main trigger, the ssh-keyscan /
+# StrictHostKeyChecking=no setup and the legacy remote command are recorded verbatim in
+# docs/deploy-workflow-audit.md. The legacy remote command ran `git reset --hard origin/main`
+# and `./deploy.sh update` inside the production working tree; it is not executed here and stays
+# blocked until a reviewed release path replaces it.
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:        # 也允许手动触发
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type deploy-production to confirm a production deployment'
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-prod
@@ -11,49 +23,110 @@ concurrency:
 
 jobs:
   deploy:
-    name: SSH 部署到生产服务器
-    runs-on: ubuntu-latest
-    environment: production # 用 GitHub Environments 加保护规则更稳
+    name: 生产部署（仅手动，受保护）
+    runs-on: ubuntu-24.04
+    environment: production  # required reviewers + main-only branch policy are configured in repo settings
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: 写入 SSH 私钥
+      - name: 拒绝：非 main 或未确认
+        env:
+          REF: ${{ github.ref }}
+          CONFIRM: ${{ inputs.confirm }}
         run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Production deployment is only allowed from refs/heads/main (got $REF)."
+            exit 1
+          fi
+          if [ "$CONFIRM" != "deploy-production" ]; then
+            echo "::error::Confirmation input does not match; deployment refused."
+            exit 1
+          fi
+
+      - name: 拒绝：缺少部署凭据或主机公钥指纹
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_HOST_KEY_SHA256: ${{ vars.SSH_HOST_KEY_SHA256 }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SSH_HOST SSH_USER DEPLOY_PATH SSH_HOST_KEY_SHA256; do
+            if [ -z "${!name:-}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Deployment refused: missing secrets/variables:$missing"
+            exit 1
+          fi
+
+      - name: 校验固定主机公钥指纹（不使用 ssh-keyscan）
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_HOST_KEY_SHA256: ${{ vars.SSH_HOST_KEY_SHA256 }}
+        run: |
+          set -euo pipefail
+          umask 077
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          pinned=~/.ssh/known_hosts_pinned
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$pinned"
+          if ! ssh-keygen -l -f "$pinned" >/dev/null 2>&1; then
+            echo "::error::SSH_KNOWN_HOSTS is not a valid known_hosts entry."
+            exit 1
+          fi
+          # No @cert-authority / @revoked markers: a pinned CA would trust every host it signs.
+          if grep -Eq '^[[:space:]]*@' "$pinned"; then
+            echo "::error::SSH_KNOWN_HOSTS must not contain @cert-authority or @revoked markers."
+            exit 1
+          fi
+          # No wildcard or negated host patterns (*, ?, !): the entry must name one host literally.
+          # Hashed entries (|1|salt|hash) use base64 and never contain these characters.
+          if awk '!/^[[:space:]]*(#|$)/ { if ($1 ~ /[*?!]/) bad = 1 } END { exit bad ? 0 : 1 }' "$pinned"; then
+            echo "::error::SSH_KNOWN_HOSTS must not use wildcard or negated host patterns."
+            exit 1
+          fi
+          # Non-default ports ([host]:port entries) are not supported: the lookup below uses the bare
+          # SSH_HOST and therefore refuses such entries.
+          # Exactly one host key entry, recorded for SSH_HOST, whose fingerprint equals the
+          # out-of-band value in the environment variable SSH_HOST_KEY_SHA256.
+          entries=$(ssh-keygen -l -f "$pinned" | wc -l | tr -d ' ')
+          if [ "$entries" != "1" ]; then
+            echo "::error::SSH_KNOWN_HOSTS must contain exactly one host key entry (found $entries)."
+            exit 1
+          fi
+          if ! ssh-keygen -F "$SSH_HOST" -f "$pinned" >/dev/null; then
+            echo "::error::SSH_KNOWN_HOSTS has no entry for the deployment host."
+            exit 1
+          fi
+          actual=$(ssh-keygen -l -E sha256 -f "$pinned" | awk '{print $2}')
+          if [ "$actual" != "$SSH_HOST_KEY_SHA256" ]; then
+            echo "::error::Pinned host key fingerprint does not match SSH_HOST_KEY_SHA256."
+            exit 1
+          fi
+          echo "Pinned host key verified: $actual"
+          # Any later ssh call must use exactly:
+          #   ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$pinned" -o BatchMode=yes ...
 
-      - name: 触发服务器更新
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}    # 服务器上仓库根目录，如 /www/wwwroot/video
+      - name: 拒绝：旧远程部署命令已停用
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
-            "${SSH_USER}@${SSH_HOST}" \
-            "set -e; cd '${DEPLOY_PATH}'; \
-             git fetch --all; \
-             git reset --hard origin/main; \
-             ./deploy.sh update"
-
-      - name: 健康检查
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 \
-            "${SSH_USER}@${SSH_HOST}" \
-            "docker compose --env-file /www/wwwroot/video/.env.prod \
-               -f /www/wwwroot/video/docker-compose.prod.yml ps"
+          echo "::error::The legacy remote command (git reset --hard origin/main; ./deploy.sh update) would overwrite uncommitted files in the production working tree and update every service. It is disabled until a reviewed release path replaces it. See docs/deploy-workflow-audit.md."
+          exit 1
 
       - name: 通知（可选 — Slack / 飞书 / 钉钉 webhook）
         if: always()
+        env:
+          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
         run: |
-          STATUS="${{ job.status }}"
-          if [ -n "${{ secrets.NOTIFY_WEBHOOK }}" ]; then
-            curl -X POST -H "Content-Type: application/json" \
-              -d "{\"text\":\"🚀 video-platform deploy: $STATUS by ${{ github.actor }} (${{ github.sha }})\"}" \
-              "${{ secrets.NOTIFY_WEBHOOK }}" || true
+          if [ -n "${NOTIFY_WEBHOOK:-}" ]; then
+            # Response body is discarded so nothing the webhook returns reaches the public log.
+            curl -sS -o /dev/null --max-time 10 -X POST -H "Content-Type: application/json" \
+              -d "{\"text\":\"video-platform deploy: ${STATUS} by ${ACTOR} (${SHA})\"}" \
+              "$NOTIFY_WEBHOOK" || true
           fi
