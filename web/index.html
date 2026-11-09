@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="color-scheme" content="light" />
+  <style>html, body { background-color: #ffffff; color-scheme: light; }</style>
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>视频平台</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    // Returning from iPhone playback: repaint the list captured when playback opened
+    // (src/utils/playback-return.ts) until Vue restores the real list underneath.
+    try {
+      const feed = JSON.parse(sessionStorage.getItem('short-playback-feed') || 'null')
+      const snap = JSON.parse(sessionStorage.getItem('short-playback-return') || 'null')
+      if ((location.pathname === '/short' || location.pathname === '/long') && feed && feed.returning && snap && snap.entry === feed.entry &&
+          typeof snap.html === 'string' && Array.isArray(snap.styles) && snap.frame) {
+        const layer = document.createElement('div')
+        layer.id = 'playback-return-replica'
+        layer.setAttribute('aria-hidden', 'true')
+        layer.inert = true
+        const f = snap.frame
+        layer.style.cssText = 'position:fixed;top:' + f.top + 'px;left:' + f.left + 'px;width:' + f.width + 'px;height:' + f.height +
+          'px;z-index:2147483000;background:#fff;overflow:hidden;pointer-events:none;visibility:hidden;color-scheme:light;color:#161616'
+        const template = document.createElement('template')
+        template.innerHTML = snap.html
+        template.content.querySelectorAll('script').forEach(node => node.remove())
+        const covers = feed.returnCovers || {}
+        template.content.querySelectorAll('img[data-replica-cover]').forEach(image => {
+          const cover = covers[image.dataset.replicaCover]
+          if (typeof cover === 'string' && cover.indexOf('data:image/') === 0) image.src = cover
+        })
+        layer.append(template.content)
+        document.body.append(layer)
+        const loaded = Array.from(document.querySelectorAll('link[rel="stylesheet"]'), link => link.href)
+        const pending = snap.styles.filter(href => href.indexOf(location.origin + '/') === 0 && loaded.indexOf(href) < 0).map(href => new Promise(resolve => {
+          const link = document.createElement('link')
+          link.rel = 'stylesheet'
+          // Same href form as Vite's CSS preloader, so it does not add the sheet twice.
+          link.href = new URL(href).pathname
+          link.onload = link.onerror = resolve
+          document.head.append(link)
+        }))
+        Promise.all(pending).then(() => {
+          const scroller = layer.querySelector('.discovery-scroll')
+          if (scroller) scroller.scrollTop = snap.top || 0
+          layer.style.visibility = 'visible'
+        })
+        setTimeout(() => layer.remove(), 4000)
+      }
+    } catch { /* Without the snapshot the list simply loads as before. */ }
+  </script>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
